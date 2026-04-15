@@ -20,7 +20,7 @@ def format_krw(val):
         return f"{val//10000}만 원" if val % 10000 == 0 else f"{val//10000}만 {val%10000}원"
     return f"{val:,}원"
 
-# [2] 명품 디자인 설정 (네이비 & 골드 베이스)
+# [2] 명품 디자인 설정
 st.set_page_config(page_title="SNS7 재무관리 리포트", layout="wide")
 st.markdown("""
 <style>
@@ -96,7 +96,6 @@ if current_user:
             
             st.divider()
 
-            # --- 상단 그래프 구역 ---
             col1, col2 = st.columns(2)
             with col1:
                 st.markdown('<div class="graph-card">', unsafe_allow_html=True)
@@ -105,16 +104,18 @@ if current_user:
                 fig.update_traces(textposition="top center", textfont_size=28, textfont_color="#1E3A8A", line=dict(width=7), marker=dict(size=15))
                 fig.add_hline(y=840, line_dash="dash", annotation_text="금리인하/정상회복(840)", line_color="#DAA520", annotation_font_size=18)
                 fig.add_hline(y=700, line_dash="dot", annotation_text="정책자금 커트라인(700)", line_color="#EF4444", annotation_font_size=18)
-                fig.update_layout(height=500, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(size=18, weight="bold"))
-                fig.update_xaxes(type='category')
-                st.plotly_chart(fig, use_container_width=True)
+                
+                # 💡 터치 잠금 및 크기 고정 적용
+                fig.update_layout(height=500, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(size=18, weight="bold"), dragmode=False)
+                fig.update_xaxes(type='category', fixedrange=True)
+                fig.update_yaxes(fixedrange=True)
+                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                 st.markdown('</div>', unsafe_allow_html=True)
 
             with col2:
                 st.markdown('<div class="graph-card">', unsafe_allow_html=True)
                 st.subheader("🏦 점수별 정책자금 지원 한도")
                 
-                # 💡 노란색 민간 자금 기둥을 1억 원(100)으로 키워서 3천만 원(30)보다 훨씬 높게!
                 tiers = ["839점 이하", "840점 이상"]
                 limits = [30, 100] 
                 labels = ["최대 3,000만 원", "1억 원 이상(민간)"]
@@ -122,17 +123,18 @@ if current_user:
                 fund_df = pd.DataFrame({"구간": tiers, "한도": limits, "설명": labels})
                 fig_f = px.bar(fund_df, x="구간", y="한도", text="설명", color="구간", 
                                color_discrete_map={
-                                   "839점 이하": "#38BDF8",  # 하늘색
-                                   "840점 이상": "#FDE047"   # 노란색
+                                   "839점 이하": "#38BDF8", 
+                                   "840점 이상": "#FDE047"   
                                })
                 fig_f.update_traces(textposition="outside", textfont_size=24, textfont_color="#1E3A8A")
-                fig_f.update_layout(height=500, showlegend=False, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(size=18, weight="bold"))
-                fig_f.update_yaxes(visible=False) 
-                st.plotly_chart(fig_f, use_container_width=True)
+                
+                # 💡 터치 잠금 및 크기 고정 적용
+                fig_f.update_layout(height=500, showlegend=False, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(size=18, weight="bold"), dragmode=False)
+                fig_f.update_xaxes(fixedrange=True)
+                fig_f.update_yaxes(visible=False, fixedrange=True) 
+                st.plotly_chart(fig_f, use_container_width=True, config={'displayModeBar': False})
                 st.markdown('</div>', unsafe_allow_html=True)
 
-            # --- 하단 그래프 구역 (매출, 절감액) ---
-            # 💡 최근 데이터를 기준으로 과거 6개월치 X축 빈칸 미리 만들기
             latest_date_obj = pd.to_datetime(latest['date'])
             six_months = [(latest_date_obj - pd.DateOffset(months=i)).strftime('%Y-%m') for i in range(5, -1, -1)]
 
@@ -142,14 +144,13 @@ if current_user:
                 st.subheader("📊 월별 매출 성장 추이 (최근 6개월)")
                 df['sales_krw'] = df['monthly_sales'].apply(format_krw)
                 fig_sales = px.bar(df, x="date", y="monthly_sales", text="sales_krw", color_discrete_sequence=["#1E3A8A"])
-                
-                # 💡 막대 가로폭을 날씬하게 (width=0.4)
                 fig_sales.update_traces(textfont_size=22, textfont_color="white", textposition="inside", width=0.4)
-                fig_sales.update_layout(height=450, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(size=18, weight="bold"))
-                fig_sales.update_yaxes(visible=False)
-                # 💡 데이터가 모자라도 무조건 6개월치 칸을 미리 그려놓음
-                fig_sales.update_xaxes(type='category', categoryorder='array', categoryarray=six_months)
-                st.plotly_chart(fig_sales, use_container_width=True)
+                
+                # 💡 터치 잠금 및 크기 고정 적용
+                fig_sales.update_layout(height=450, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(size=18, weight="bold"), dragmode=False)
+                fig_sales.update_xaxes(type='category', categoryorder='array', categoryarray=six_months, fixedrange=True)
+                fig_sales.update_yaxes(visible=False, fixedrange=True)
+                st.plotly_chart(fig_sales, use_container_width=True, config={'displayModeBar': False})
                 st.markdown('</div>', unsafe_allow_html=True)
 
             with col4:
@@ -157,13 +158,13 @@ if current_user:
                 st.subheader("💰 월별 경영 비용 절감액 (최근 6개월)")
                 df['saved_krw'] = df['saved_amount'].apply(format_krw)
                 fig_saved = px.bar(df, x="date", y="saved_amount", text="saved_krw", color_discrete_sequence=["#DAA520"])
-                
-                # 💡 막대 가로폭을 날씬하게 (width=0.4)
                 fig_saved.update_traces(textfont_size=22, textfont_color="black", textposition="outside", width=0.4)
-                fig_saved.update_layout(height=450, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(size=18, weight="bold"))
-                fig_saved.update_yaxes(visible=False)
-                fig_saved.update_xaxes(type='category', categoryorder='array', categoryarray=six_months)
-                st.plotly_chart(fig_saved, use_container_width=True)
+                
+                # 💡 터치 잠금 및 크기 고정 적용
+                fig_saved.update_layout(height=450, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(size=18, weight="bold"), dragmode=False)
+                fig_saved.update_xaxes(type='category', categoryorder='array', categoryarray=six_months, fixedrange=True)
+                fig_saved.update_yaxes(visible=False, fixedrange=True)
+                st.plotly_chart(fig_saved, use_container_width=True, config={'displayModeBar': False})
                 st.markdown('</div>', unsafe_allow_html=True)
 
     with tab2:
