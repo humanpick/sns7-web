@@ -8,7 +8,7 @@ URL = st.secrets["SUPABASE_URL"]
 KEY = st.secrets["SUPABASE_KEY"]
 supabase = create_client(URL, KEY)
 
-# 💡 한국어 돈 단위 변환 함수 (예: 30000000 -> 3천만 원)
+# 💡 한국어 돈 단위 변환 함수 
 def format_krw(val):
     if pd.isna(val) or val == 0: return "0원"
     val = int(val)
@@ -20,7 +20,7 @@ def format_krw(val):
         return f"{val//10000}만 원" if val % 10000 == 0 else f"{val//10000}만 {val%10000}원"
     return f"{val:,}원"
 
-# [2] 명품 디자인 설정
+# [2] 명품 디자인 설정 (에메랄드 그린 포인트)
 st.set_page_config(page_title="SNS7 재무관리 리포트", layout="wide")
 st.markdown("""
 <style>
@@ -39,12 +39,17 @@ st.markdown("""
         border: 1px solid #E2E8F0; margin-bottom: 25px;
     }
 
-    [data-testid="stMetricValue"] { font-size: 4rem !important; color: #DAA520 !important; font-weight: 900 !important; }
-    [data-testid="stMetricLabel"] { font-size: 1.5rem !important; color: #1E3A8A !important; font-weight: 900 !important; }
+    /* 💡 1. 타이틀(이름) 폰트 크기 축소 */
+    h1 { font-size: 2.2rem !important; }
 
+    /* 💡 2. 상단 숫자(신용점수, 매출 등) 크기 축소 & 컬러 변경 (에메랄드 그린) */
+    [data-testid="stMetricValue"] { font-size: 3.2rem !important; color: #059669 !important; font-weight: 900 !important; }
+    [data-testid="stMetricLabel"] { font-size: 1.2rem !important; color: #1E3A8A !important; font-weight: 900 !important; }
+
+    /* 혜택 카드도 에메랄드 그린으로 통일 */
     .benefit-card {
-        background-color: #DAA520; color: white; padding: 25px; border-radius: 20px;
-        text-align: center; margin-bottom: 30px; font-weight: bold; font-size: 2rem;
+        background-color: #059669; color: white; padding: 25px; border-radius: 20px;
+        text-align: center; margin-bottom: 30px; font-weight: bold; font-size: 1.8rem;
     }
     
     input { color: black !important; font-weight: bold !important; font-size: 1.2rem !important; }
@@ -76,7 +81,7 @@ if current_user:
     tab1, tab2 = st.tabs(["📈 분석 리포트", "🛠️ 데이터 수정/삭제"])
 
     with tab1:
-        st.title(f"📊 {current_user} 재무관리 분석 리포트")
+        st.title(f"📊 {current_user} 재무관리 리포트")
         res = supabase.table("financial_data").select("*").eq("client_id", selected_id).execute()
         df = pd.DataFrame(res.data)
 
@@ -100,12 +105,12 @@ if current_user:
             with col1:
                 st.markdown('<div class="graph-card">', unsafe_allow_html=True)
                 st.subheader("📈 신용점수 변화 추이")
-                fig = px.line(df, x="date", y="credit_score", markers=True, text="credit_score", color_discrete_sequence=["#DAA520"])
+                # 💡 선 그래프도 에메랄드 그린으로 변경
+                fig = px.line(df, x="date", y="credit_score", markers=True, text="credit_score", color_discrete_sequence=["#059669"])
                 fig.update_traces(textposition="top center", textfont_size=28, textfont_color="#1E3A8A", line=dict(width=7), marker=dict(size=15))
-                fig.add_hline(y=840, line_dash="dash", annotation_text="금리인하/정상회복(840)", line_color="#DAA520", annotation_font_size=18)
+                fig.add_hline(y=840, line_dash="dash", annotation_text="금리인하/정상회복(840)", line_color="#059669", annotation_font_size=18)
                 fig.add_hline(y=700, line_dash="dot", annotation_text="정책자금 커트라인(700)", line_color="#EF4444", annotation_font_size=18)
                 
-                # 💡 터치 잠금 및 크기 고정 적용
                 fig.update_layout(height=500, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(size=18, weight="bold"), dragmode=False)
                 fig.update_xaxes(type='category', fixedrange=True)
                 fig.update_yaxes(fixedrange=True)
@@ -128,8 +133,7 @@ if current_user:
                                })
                 fig_f.update_traces(textposition="outside", textfont_size=24, textfont_color="#1E3A8A")
                 
-                # 💡 터치 잠금 및 크기 고정 적용
-                fig_f.update_layout(height=500, showlegend=False, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(size=18, weight="bold"), dragmode=False)
+                fig.update_layout(height=500, showlegend=False, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(size=18, weight="bold"), dragmode=False)
                 fig_f.update_xaxes(fixedrange=True)
                 fig_f.update_yaxes(visible=False, fixedrange=True) 
                 st.plotly_chart(fig_f, use_container_width=True, config={'displayModeBar': False})
@@ -144,9 +148,8 @@ if current_user:
                 st.subheader("📊 월별 매출 성장 추이 (최근 6개월)")
                 df['sales_krw'] = df['monthly_sales'].apply(format_krw)
                 fig_sales = px.bar(df, x="date", y="monthly_sales", text="sales_krw", color_discrete_sequence=["#1E3A8A"])
-                fig_sales.update_traces(textfont_size=22, textfont_color="white", textposition="inside", width=0.4)
+                fig_sales.update_traces(textfont_size=20, textfont_color="white", textposition="inside", width=0.4)
                 
-                # 💡 터치 잠금 및 크기 고정 적용
                 fig_sales.update_layout(height=450, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(size=18, weight="bold"), dragmode=False)
                 fig_sales.update_xaxes(type='category', categoryorder='array', categoryarray=six_months, fixedrange=True)
                 fig_sales.update_yaxes(visible=False, fixedrange=True)
@@ -157,10 +160,10 @@ if current_user:
                 st.markdown('<div class="graph-card">', unsafe_allow_html=True)
                 st.subheader("💰 월별 경영 비용 절감액 (최근 6개월)")
                 df['saved_krw'] = df['saved_amount'].apply(format_krw)
-                fig_saved = px.bar(df, x="date", y="saved_amount", text="saved_krw", color_discrete_sequence=["#DAA520"])
-                fig_saved.update_traces(textfont_size=22, textfont_color="black", textposition="outside", width=0.4)
+                # 💡 절감액 막대 그래프도 에메랄드 그린으로 변경
+                fig_saved = px.bar(df, x="date", y="saved_amount", text="saved_krw", color_discrete_sequence=["#059669"])
+                fig_saved.update_traces(textfont_size=20, textfont_color="black", textposition="outside", width=0.4)
                 
-                # 💡 터치 잠금 및 크기 고정 적용
                 fig_saved.update_layout(height=450, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(size=18, weight="bold"), dragmode=False)
                 fig_saved.update_xaxes(type='category', categoryorder='array', categoryarray=six_months, fixedrange=True)
                 fig_saved.update_yaxes(visible=False, fixedrange=True)
