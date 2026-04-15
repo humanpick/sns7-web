@@ -8,15 +8,15 @@ URL = st.secrets["SUPABASE_URL"]
 KEY = st.secrets["SUPABASE_KEY"]
 supabase = create_client(URL, KEY)
 
-# 💡 한국어 돈 단위로 예쁘게 바꿔주는 마법 함수 (예: 30000000 -> 3천만 원)
+# 💡 한국어 돈 단위 변환 함수 (예: 30000000 -> 3천만 원)
 def format_krw(val):
     if pd.isna(val) or val == 0: return "0원"
     val = int(val)
-    if val >= 100000000: # 1억 이상
+    if val >= 100000000:
         eok = val // 100000000
         man = (val % 100000000) // 10000
         return f"{eok}억 {man}만 원" if man else f"{eok}억 원"
-    elif val >= 10000: # 1만 이상
+    elif val >= 10000:
         return f"{val//10000}만 원" if val % 10000 == 0 else f"{val//10000}만 {val%10000}원"
     return f"{val:,}원"
 
@@ -89,7 +89,6 @@ if current_user:
             if is_eligible:
                 st.markdown(f'<div class="benefit-card">🎊 금리 인하권 획득! 대출 금리 0.5%p 즉시 인하 가능</div>', unsafe_allow_html=True)
 
-            # 상단 핵심 지표 (단위 변환 함수 적용)
             col_a, col_b, col_c = st.columns(3)
             col_a.metric("현재 신용점수", f"{c_score}점")
             col_b.metric("최근 월 매출", format_krw(latest.get('monthly_sales', 0)))
@@ -115,47 +114,55 @@ if current_user:
                 st.markdown('<div class="graph-card">', unsafe_allow_html=True)
                 st.subheader("🏦 점수별 정책자금 지원 한도")
                 
-                # 💡 요청하신 순서와 하늘색/노란색 변경!
+                # 💡 노란색 민간 자금 기둥을 1억 원(100)으로 키워서 3천만 원(30)보다 훨씬 높게!
                 tiers = ["839점 이하", "840점 이상"]
-                limits = [30, 10] 
-                labels = ["최대 3,000만 원", "민간 자금 권장"]
+                limits = [30, 100] 
+                labels = ["최대 3,000만 원", "1억 원 이상(민간)"]
                 
                 fund_df = pd.DataFrame({"구간": tiers, "한도": limits, "설명": labels})
                 fig_f = px.bar(fund_df, x="구간", y="한도", text="설명", color="구간", 
                                color_discrete_map={
-                                   "839점 이하": "#38BDF8",  # 눈에 띄는 하늘색
-                                   "840점 이상": "#FDE047"   # 밝은 노란색
+                                   "839점 이하": "#38BDF8",  # 하늘색
+                                   "840점 이상": "#FDE047"   # 노란색
                                })
                 fig_f.update_traces(textposition="outside", textfont_size=24, textfont_color="#1E3A8A")
                 fig_f.update_layout(height=500, showlegend=False, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(size=18, weight="bold"))
-                fig_f.update_yaxes(visible=False) # 지저분한 Y축 숫자 숨김
+                fig_f.update_yaxes(visible=False) 
                 st.plotly_chart(fig_f, use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
 
             # --- 하단 그래프 구역 (매출, 절감액) ---
+            # 💡 최근 데이터를 기준으로 과거 6개월치 X축 빈칸 미리 만들기
+            latest_date_obj = pd.to_datetime(latest['date'])
+            six_months = [(latest_date_obj - pd.DateOffset(months=i)).strftime('%Y-%m') for i in range(5, -1, -1)]
+
             col3, col4 = st.columns(2)
             with col3:
                 st.markdown('<div class="graph-card">', unsafe_allow_html=True)
-                st.subheader("📊 월별 매출 성장 추이")
-                # 숫자를 한글로 변환해서 기둥에 표기
+                st.subheader("📊 월별 매출 성장 추이 (최근 6개월)")
                 df['sales_krw'] = df['monthly_sales'].apply(format_krw)
                 fig_sales = px.bar(df, x="date", y="monthly_sales", text="sales_krw", color_discrete_sequence=["#1E3A8A"])
-                fig_sales.update_traces(textfont_size=22, textfont_color="white", textposition="inside")
+                
+                # 💡 막대 가로폭을 날씬하게 (width=0.4)
+                fig_sales.update_traces(textfont_size=22, textfont_color="white", textposition="inside", width=0.4)
                 fig_sales.update_layout(height=450, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(size=18, weight="bold"))
                 fig_sales.update_yaxes(visible=False)
-                fig_sales.update_xaxes(type='category')
+                # 💡 데이터가 모자라도 무조건 6개월치 칸을 미리 그려놓음
+                fig_sales.update_xaxes(type='category', categoryorder='array', categoryarray=six_months)
                 st.plotly_chart(fig_sales, use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
 
             with col4:
                 st.markdown('<div class="graph-card">', unsafe_allow_html=True)
-                st.subheader("💰 월별 경영 비용 절감액")
+                st.subheader("💰 월별 경영 비용 절감액 (최근 6개월)")
                 df['saved_krw'] = df['saved_amount'].apply(format_krw)
                 fig_saved = px.bar(df, x="date", y="saved_amount", text="saved_krw", color_discrete_sequence=["#DAA520"])
-                fig_saved.update_traces(textfont_size=22, textfont_color="black", textposition="outside")
+                
+                # 💡 막대 가로폭을 날씬하게 (width=0.4)
+                fig_saved.update_traces(textfont_size=22, textfont_color="black", textposition="outside", width=0.4)
                 fig_saved.update_layout(height=450, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(size=18, weight="bold"))
                 fig_saved.update_yaxes(visible=False)
-                fig_saved.update_xaxes(type='category')
+                fig_saved.update_xaxes(type='category', categoryorder='array', categoryarray=six_months)
                 st.plotly_chart(fig_saved, use_container_width=True)
                 st.markdown('</div>', unsafe_allow_html=True)
 
