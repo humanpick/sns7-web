@@ -14,7 +14,18 @@ st.markdown("""
 <style>
     .stApp { background-color: #F8FAFC; }
     [data-testid="stSidebar"] { background-color: #1E3A8A !important; }
-    [data-testid="stSidebar"] * { color: white !important; }
+    
+    /* 사이드바의 기본 글자(제목, 설명)는 하얀색으로 유지 */
+    [data-testid="stSidebar"] p, [data-testid="stSidebar"] span, [data-testid="stSidebar"] label { 
+        color: white !important; 
+    }
+    
+    /* 🚨 수정된 부분: 입력창(텍스트, 숫자) 안에 쓰는 글자는 까만색으로! */
+    input { 
+        color: black !important; 
+        background-color: white !important;
+    }
+    
     .stButton>button { background-color: #DAA520 !important; color: white !important; }
 </style>
 """, unsafe_allow_html=True)
