@@ -74,14 +74,13 @@ with st.sidebar:
     if client_res_for_view.data:
         view_names = {c['name']: c['id'] for c in client_res_for_view.data}
         current_user = st.selectbox("📊 리포트 조회", list(view_names.keys()))
-        selected_id = view_names[current_user] # 선택된 사장님 고유번호 기억
+        selected_id = view_names[current_user] 
     else: 
         current_user = None
         selected_id = None
 
 # [4] 메인 화면
 if current_user and selected_id:
-    # 🚨 여기서 탭(방)을 확실하게 2개로 나눕니다!
     tab1, tab2 = st.tabs(["📈 분석 리포트 확인", "🛠️ 데이터 수정/삭제"])
 
     with tab1:
@@ -156,8 +155,9 @@ if current_user and selected_id:
                     st.plotly_chart(fig_saved, use_container_width=True)
                     st.markdown('</div>', unsafe_allow_html=True)
 
-            except Exception as e:
-                st.info("데이터를 분석하는 중입니다... 사이드바에서 데이터를 입력해 보세요!")
+        # 🚨 이 부분의 띄어쓰기를 완벽하게 고쳤습니다! (try: 와 세로줄 맞춤)
+        except Exception as e:
+            st.info("데이터를 분석하는 중입니다... 사이드바에서 데이터를 입력해 보세요!")
 
     with tab2:
         st.header(f"🛠️ {current_user} 데이터 관리실")
@@ -171,7 +171,6 @@ if current_user and selected_id:
                 
                 row = edit_df[edit_df['date'] == edit_date].iloc[0]
                 
-                # 우편 봉투(form) 안에는 수정 완료 버튼만 넣기
                 with st.form(key=f"edit_form_{edit_date}"):
                     st.subheader(f"📅 {edit_date} 데이터 수정")
                     ec1, ec2 = st.columns(2)
@@ -189,7 +188,6 @@ if current_user and selected_id:
                 
                 st.write("---")
                 
-                # 삭제 버튼은 우편 봉투 밖에 안전하게 빼두기 (에러 해결 완료!)
                 if st.button("🗑️ 이 날짜 데이터 삭제 (복구 불가)", type="primary"):
                     supabase.table("financial_data").delete().eq("id", row['id']).execute()
                     st.warning(f"{edit_date} 데이터가 삭제되었습니다!")
