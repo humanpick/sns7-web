@@ -138,43 +138,39 @@ if st.session_state["authentication_status"] == True:
 
                 with col1:
                     st.subheader("🛡️ 신용점수 분석 추이")
+                    # [진짜 해결 1] zero=False를 추가해야 차트가 0이 아닌 500부터 시작합니다!
                     base = alt.Chart(df).encode(
                         x=x_ax, 
-                        y=alt.Y('score_val:Q', scale=alt.Scale(domain=[500, 999]), title='점수', axis=alt.Axis(labelColor='black'))
+                        y=alt.Y('score_val:Q', scale=alt.Scale(domain=[500, 999], zero=False), title='점수', axis=alt.Axis(labelColor='black'))
                     )
                     rule = alt.Chart(pd.DataFrame({'y': [839]})).mark_rule(strokeDash=[5,5], color='gray').encode(y='y:Q')
                     line = base.mark_line(color='#ff4b4b', size=3)
                     point = base.mark_circle(color='#ff4b4b', size=150)
                     
-                    # [핵심] clip=False를 넣어서 글씨가 잘리는 것을 원천 봉쇄
                     text = base.mark_text(
                         dy=-25, size=16, fontWeight='bold', color='black', clip=False
                     ).encode(text='score_val:Q')
                     
                     chart_score = alt.layer(rule, line, point, text).properties(height=350)
-                    
-                    # [핵심] theme=None 을 적용하여 스트림릿의 간섭을 완전히 차단!
                     st.altair_chart(chart_score, use_container_width=True, theme=None)
                     st.caption("※ 회색 점선: 정책자금 권장 기준선 (839점)")
 
                 with col2:
                     st.subheader("💰 월 매출 성장 추이")
+                    # [진짜 해결 2] 복잡한 labelExpr 삭제하고, 가장 안전한 format="," 적용
                     base_s = alt.Chart(df).encode(
                         x=x_ax, 
                         y=alt.Y('sales_val:Q', scale=alt.Scale(domain=[0, 50000]), title='매출(만원)', 
-                                axis=alt.Axis(values=[0, 10000, 20000, 30000, 40000, 50000], labelExpr="format(datum.value, ',')", labelColor='black'))
+                                axis=alt.Axis(values=[0, 10000, 20000, 30000, 40000, 50000], format=",", labelColor='black'))
                     )
                     line_s = base_s.mark_line(color='#0068c9', size=3)
                     point_s = base_s.mark_circle(color='#0068c9', size=150)
                     
-                    # [핵심] dy를 더 띄워서 바닥에 안 닿게 하고 clip=False 적용
                     text_s = base_s.mark_text(
                         dy=-25, size=16, fontWeight='bold', color='black', clip=False
                     ).encode(text=alt.Text('sales_val:Q', format=','))
                     
                     chart_sales = alt.layer(line_s, point_s, text_s).properties(height=350)
-                    
-                    # [핵심] theme=None 을 적용하여 스트림릿의 간섭을 완전히 차단!
                     st.altair_chart(chart_sales, use_container_width=True, theme=None)
                     st.caption("※ 차트 범위: 0원 ~ 5억 원 (50,000만 원)")
 
