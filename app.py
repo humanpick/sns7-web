@@ -3,7 +3,7 @@ import streamlit_authenticator as stauth
 from supabase import create_client, Client
 import pandas as pd
 import altair as alt
-import bcrypt  # 💡 Hasher 에러를 잡기 위해 엔진을 직접 호출합니다.
+import bcrypt
 
 # ==========================================
 # 1. 프리미엄 UI 디자인 및 시스템 설정
@@ -44,7 +44,6 @@ st.markdown(style_code, unsafe_allow_html=True)
 SUPABASE_URL = "https://pjpnaqyyzlkolnfvlpps.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBqcG5hcXl5emxrb2xuZnZscHBzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxOTEwNzgsImV4cCI6MjA5MTc2NzA3OH0.Y1kR473B-XdxnZZG3akAsp6kvGxTIL1S8IG7is8mgMM"
 
-
 @st.cache_resource(show_spinner=False)
 def init_connection():
     return create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -61,7 +60,6 @@ except Exception as e:
 def fetch_users():
     try:
         response = supabase.table('users').select('*').execute()
-        # 💡 [구조 고정] 반드시 'usernames' 키를 가진 딕셔너리로 만듭니다.
         creds = {'usernames': {}}
         if response.data:
             for user in response.data:
@@ -69,31 +67,21 @@ def fetch_users():
                 creds['usernames'][u_id] = {
                     'name': str(user['name']),
                     'password': str(user['password']),
-                    'role': str(user.get('role', 'viewer')),
-                    'phone': str(user.get('phone', ''))
+                    'role': str(user.get('role', 'viewer'))
                 }
         return creds
     except:
         return {'usernames': {}}
 
 credentials = fetch_users()
+authenticator = stauth.Authenticate(credentials, 'ceo_portal_cookie', 'signature_key', cookie_expiry_days=30)
 
-# 인증기 초기화 (가장 보수적이고 안전한 설정)
-authenticator = stauth.Authenticate(
-    credentials=credentials,
-    cookie_name='ceo_portal_cookie',
-    key='signature_key',
-    cookie_expiry_days=30
-)
-
-# 로그인 화면
 authenticator.login('main')
 
 if st.session_state.get("authentication_status"):
     username = st.session_state["username"]
     all_users = credentials.get('usernames', {})
     user_data = all_users.get(username, {})
-    
     user_role = user_data.get('role', 'viewer')
     real_name = user_data.get('name', username)
     
@@ -109,19 +97,18 @@ if st.session_state.get("authentication_status"):
         st.title("👑 관리자 데이터 센터")
         tab1, tab2, tab3 = st.tabs(["📝 데이터 입력", "👥 고객 등록 및 관리", "📜 전체 리포트 이력"])
         
-        # [Tab 1: 데이터 입력]
         with tab1:
             st.subheader("리포트 수치 입력")
             viewer_list = [u for u in all_users if all_users[u].get('role') != 'admin']
             if not viewer_list:
-                st.info("고객을 먼저 등록해 주세요.")
+                st.info("먼저 고객을 등록해 주세요.")
             else:
                 selected_client = st.selectbox("대상을 선택하세요", viewer_list, 
                                                format_func=lambda x: f"{all_users[x].get('name')} ({x})")
                 with st.form("data_input_form", clear_on_submit=True):
                     col1, col2 = st.columns(2)
                     with col1:
-                        new_score = st.number_input("신용점수 (500~999)", min_value=500, max_value=999, value=850)
+                        new_score = st.number_input("신용점수", min_value=500, max_value=999, value=850)
                     with col2:
                         new_sales = st.number_input("월 매출액 (만원)", min_value=0, value=1500)
                     new_strategy = st.text_area("공민준 센터장의 전략 제언")
@@ -133,7 +120,6 @@ if st.session_state.get("authentication_status"):
                         st.success("저장되었습니다!")
                         st.rerun()
 
-        # [Tab 2: 고객 등록 및 관리]
         with tab2:
             st.subheader("신규 고객 계정 생성")
             with st.form("user_reg_form"):
@@ -144,31 +130,32 @@ if st.session_state.get("authentication_status"):
                 
                 if st.form_submit_button("고객 정보 저장 및 등록"):
                     if not reg_id or not reg_pw or not reg_name:
-                        st.warning("ID, 비번, 성함은 필수입니다.")
+                        st.warning("필수 항목(ID, 비번, 성함)을 모두 입력해 주세요.")
                     elif reg_id in all_users:
                         st.error("이미 존재하는 ID입니다.")
                     else:
                         try:
-                            # 💡 [에러 박멸] 라이브러리 함수 대신 bcrypt를 직접 사용하여 암호화합니다.
-                            # 이 방식은 '리스트 인덱스' 에러가 절대 발생할 수 없습니다.
+                            # 💡 bcrypt 직접 암호화 (Hasher 에러 완전 방어)
                             hashed_pw = bcrypt.hashpw(reg_pw.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
                             
+                            # 💡 [핵심 해결] DB 스키마에 없는 phone 컬럼을 제외하고 저장합니다.
                             supabase.table('users').insert({
-                                "username": reg_id, "name": reg_name, 
-                                "password": hashed_pw, "role": "viewer", "phone": reg_phone
+                                "username": reg_id, 
+                                "name": reg_name, 
+                                "password": hashed_pw, 
+                                "role": "viewer"
                             }).execute()
-                            st.success(f"✅ {reg_name} 대표님 등록 완료!")
+                            
+                            st.success(f"✅ {reg_name} 대표님 등록 완료! (휴대폰 번호 기록용: {reg_phone})")
                             st.rerun()
                         except Exception as e:
                             st.error(f"등록 실패: {e}")
             
             st.divider()
             st.subheader("현재 등록된 고객 리스트")
-            cl_display = [{"ID": k, "이름": v.get('name'), "번호": v.get('phone')} 
-                          for k, v in all_users.items() if v.get('role') != 'admin']
+            cl_display = [{"ID": k, "이름": v.get('name')} for k, v in all_users.items() if v.get('role') != 'admin']
             if cl_display: st.table(pd.DataFrame(cl_display))
 
-        # [Tab 3: 전체 리포트 이력]
         with tab3:
             st.subheader("전체 발행 기록")
             all_res = supabase.table('client_data').select('*').order('created_at', desc=True).execute()
