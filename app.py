@@ -10,7 +10,7 @@ import altair as alt
 # ==========================================
 st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide")
 
-# 차트 메뉴(데이터 표시, 전체화면)를 완전히 숨기는 CSS
+# [핵심] 차트 우측 상단 메뉴, 전체화면 버튼 영구 삭제
 st.markdown("""
     <style>
     [data-testid="stElementActions"] {display: none !important;}
@@ -78,7 +78,7 @@ elif st.session_state["authentication_status"] == True:
     name = st.session_state["name"]
     user_role = credentials['usernames'][username]['role']
     
-    # 실시간 DB에서 최신 이름 가져오기
+    # 쿠키 무시! DB에서 무조건 실명 가져오기
     try:
         user_res = supabase.table('users').select('name').eq('username', username).execute()
         real_name = user_res.data[0]['name'] if user_res.data else name
@@ -109,7 +109,6 @@ elif st.session_state["authentication_status"] == True:
             res = supabase.table('client_data').select('*').order('created_at', desc=True).execute()
             if res.data:
                 all_df = pd.DataFrame(res.data)
-                # 관리자 보기 편하게 날짜 형식 변환
                 display_df = all_df.copy()
                 if 'created_at' in display_df.columns:
                     display_df['created_at'] = pd.to_datetime(display_df['created_at']).dt.tz_localize(None).dt.strftime('%Y-%m-%d %H:%M:%S')
@@ -121,7 +120,6 @@ elif st.session_state["authentication_status"] == True:
         
         st.divider()
         
-        # 💡 [핵심] 관리자 입력 폼을 2개의 탭으로 분리했습니다!
         tab1, tab2 = st.tabs(["➕ 새 리포트 발행 (신규/추가)", "✏️ 기존 데이터 수정 (오타 수정)"])
         
         with tab1:
@@ -158,14 +156,11 @@ elif st.session_state["authentication_status"] == True:
         with tab2:
             st.subheader("잘못 입력된 기존 데이터를 찾아 수정합니다.")
             if not all_df.empty:
-                # 1. 수정할 고객 선택
                 unique_cids = all_df['client_id'].unique().tolist()
                 edit_cid = st.selectbox("1. 수정할 고객 ID 선택", ["선택하세요"] + unique_cids)
                 
                 if edit_cid != "선택하세요":
                     client_df = all_df[all_df['client_id'] == edit_cid].sort_values('created_at', ascending=False)
-                    
-                    # 2. 수정할 날짜의 데이터 선택 (초 단위까지 보여줘서 정확히 선택 가능)
                     date_options = client_df['created_at'].tolist()
                     display_dates = [str(x)[:19].replace('T', ' ') for x in date_options]
                     
@@ -175,7 +170,6 @@ elif st.session_state["authentication_status"] == True:
                         target_idx = display_dates.index(selected_display)
                         target_record = client_df.iloc[target_idx]
                         
-                        # 3. 기존 데이터가 미리 채워진 수정 폼 제공
                         with st.form("edit_existing_form"):
                             st.write(f"**{target_record.get('company_name', '')}** 대표님의 데이터를 수정합니다.")
                             col1, col2 = st.columns(2)
@@ -188,7 +182,6 @@ elif st.session_state["authentication_status"] == True:
                             
                             if st.form_submit_button("✅ 수정한 내용으로 덮어쓰기"):
                                 try:
-                                    # client_data 테이블 업데이트
                                     supabase.table('client_data').update({
                                         'company_name': e_name,
                                         'credit_score': e_score,
@@ -196,7 +189,6 @@ elif st.session_state["authentication_status"] == True:
                                         'strategy_comment': e_comment
                                     }).eq('client_id', edit_cid).eq('created_at', target_record['created_at']).execute()
                                     
-                                    # 이름이 바뀌었을 수 있으므로 users 테이블도 동기화 업데이트
                                     supabase.table('users').update({
                                         'name': e_name
                                     }).eq('username', edit_cid).execute()
@@ -209,7 +201,7 @@ elif st.session_state["authentication_status"] == True:
                 st.info("수정할 고객 데이터가 존재하지 않습니다.")
 
     # ==========================================
-    # 4-B. [고객 모드] 업체 대표님 전용 
+    # 4-B. [고객 모드] 업체 대표님 전용
     # ==========================================
     else:
         st.title(f"📈 {real_name} 대표님 맞춤형 경영 리포트")
@@ -276,9 +268,12 @@ elif st.session_state["authentication_status"] == True:
 
                 with col2:
                     st.subheader("💰 월 매출 성장 추이")
+                    
+                    # 💡 [핵심 해결] 에러를 일으키던 format 속성을 빼고, 엔진이 절대 거부할 수 없는 자바스크립트 수식(labelExpr)으로 콤마(,)를 강제했습니다!
                     base_sales = alt.Chart(df).encode(
                         x=x_axis,
-                        y=alt.Y('sales_num:Q', scale=alt.Scale(domain=[0, 50000]), title='월 매출액 (만원)', axis=alt.Axis(values=[0, 10000, 20000, 30000, 40000, 50000], format=",.0f"))
+                        y=alt.Y('sales_num:Q', scale=alt.Scale(domain=[0, 50000]), title='월 매출액 (만원)', 
+                                axis=alt.Axis(values=[0, 10000, 20000, 30000, 40000, 50000], labelExpr="format(datum.value, ',')"))
                     )
                     line_sales = base_sales.mark_line(color='#0068c9', size=3)
                     point_sales = base_sales.mark_circle(color='#0068c9', size=150)
