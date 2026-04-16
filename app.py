@@ -6,19 +6,51 @@ import bcrypt
 import altair as alt
 
 # ==========================================
-# 1. 시스템 설정 및 Supabase 연동
+# 1. 시스템 설정 및 프리미엄 UI 디자인 (CSS)
 # ==========================================
 st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide")
 
-st.markdown("""
+# 네이비 & 골드 테마 색상 정의
+NAVY = "#001F3F"
+GOLD = "#D4AF37"
+
+st.markdown(f"""
     <meta name="google" content="notranslate">
     <style>
-    .block-container { padding-top: 0rem !important; margin-top: -50px !important; }
-    header { visibility: hidden; height: 0px; }
-    [data-testid="stElementActions"], .vega-actions { display: none !important; }
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;500;700&display=swap');
+    html, body, [class*="css"] {{ font-family: 'Noto Sans KR', sans-serif; }}
+    
+    /* 배경 및 사이드바 */
+    .stApp {{ background-color: #FDFDFD; }}
+    [data-testid="stSidebar"] {{ background-color: {NAVY} !important; color: white !important; }}
+    [data-testid="stSidebar"] * {{ color: white !important; }}
+
+    /* 버튼 디자인 */
+    .stButton>button {{
+        background-color: {GOLD} !important;
+        color: {NAVY} !important;
+        border-radius: 5px;
+        font-weight: 700;
+        border: none;
+    }}
+
+    /* 여백 및 불필요 아이콘 제거 */
+    .block-container {{ padding-top: 1rem !important; margin-top: -30px !important; }}
+    header {{ visibility: hidden; height: 0px; }}
+    [data-testid="stElementActions"], .vega-actions {{ display: none !important; }}
+    
+    /* 메트릭 카드 디자인 */
+    div[data-testid="metric-container"] {{
+        background-color: white;
+        border: 1px solid #E0E0E0;
+        padding: 15px;
+        border-radius: 10px;
+        box-shadow: 2px 2px 10px rgba(0,0,0,0.05);
+    }}
     </style>
 """, unsafe_allow_html=True)
 
+# Supabase 접속 정보 (키 값은 직접 입력이 필요합니다)
 SUPABASE_URL = "https://pjpnaqyyzlkolnfvlpps.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBqcG5hcXl5emxrb2xuZnZscHBzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxOTEwNzgsImV4cCI6MjA5MTc2NzA3OH0.Y1kR473B-XdxnZZG3akAsp6kvGxTIL1S8IG7is8mgMM"
 
@@ -34,7 +66,7 @@ except Exception as e:
     st.stop()
 
 # ==========================================
-# 2. 데이터 통신 및 로그인
+# 2. 데이터 처리 및 인증 시스템
 # ==========================================
 def fetch_users():
     try:
@@ -52,23 +84,26 @@ credentials = fetch_users()
 authenticator = stauth.Authenticate(credentials, 'ceo_portal_cookie', 'signature_key', cookie_expiry_days=30)
 authenticator.login('main')
 
-if st.session_state.get("authentication_status") == True:
+if st.session_state.get("authentication_status"):
     username = st.session_state["username"]
     
+    # 실시간 이름 동기화
     try:
         user_res = supabase.table('users').select('name').eq('username', username).execute()
         real_name = user_res.data[0]['name'] if user_res.data else credentials['usernames'][username]['name']
     except: real_name = credentials['usernames'][username]['name']
 
     with st.sidebar:
-        st.write(f"**{real_name}**님 반갑습니다.")
+        st.write(f"**{real_name}** 대표님 반갑습니다.")
         authenticator.logout('로그아웃', 'sidebar')
 
     if credentials['usernames'][username]['role'] == 'admin':
         st.title("👑 관리자 대시보드")
+        st.info("고객 데이터 관리 모드입니다.")
     else:
-        st.title(f"📈 {real_name} 대표님 맞춤형 경영 리포트")
-        
+        # ==========================================
+        # 3. 리포트 본문 (프리미엄 디자인)
+        # ==========================================
         try:
             res = supabase.table('client_data').select('*').eq('client_id', username).order('created_at').execute()
             
@@ -77,11 +112,10 @@ if st.session_state.get("authentication_status") == True:
                 df['created_at'] = pd.to_datetime(df.get('created_at', pd.Timestamp.now())).dt.tz_localize(None)
                 df['날짜'] = df['created_at'].dt.strftime('%Y-%m-%d')
                 
+                # 수치 변환 및 스케일링
                 df['점수'] = pd.to_numeric(df['credit_score'], errors='coerce').fillna(0).astype(int)
                 df['매출'] = pd.to_numeric(df['monthly_sales'], errors='coerce').fillna(0).astype(int)
-
-                # 💡 [핵심] 매출을 10000으로 나누어 '억원' 단위로 변환 (엔진 오류 원천 차단)
-                df['매출_억'] = df['매출'] / 10000.0
+                df['매출_억'] = df['매출'] / 10000.0  # 💡 1e+4 오류 방지를 위한 억원 단위 변환
 
                 df['점수_텍스트'] = df['점수'].astype(str)
                 df['매출_텍스트'] = df['매출'].apply(lambda x: f"{x:,}")
@@ -89,32 +123,36 @@ if st.session_state.get("authentication_status") == True:
                 latest = df.iloc[-1]
                 safe_score, safe_sales = int(latest['점수']), int(latest['매출'])
                 
-                bg_color = "#87CEEB" if safe_score > 839 else "#FFCCCC"
+                # 상단 배너
                 st.markdown(f"""
-                    <div style="background-color:{bg_color}; padding:10px; border-radius:10px; border:2px solid #333; text-align:center;">
-                        <h3 style="color:black; margin:0 0 5px 0;">현재 상태: {"정책자금 기준(839) 충족" if safe_score > 839 else "정책자금 기준(839) 미달"}</h3>
-                        <p style="color:black; font-size:16px; margin:0;">
-                            <b>{real_name}</b> 대표님의 최신 신용점수는 <b>{safe_score}점</b> 입니다.
+                    <div style="background: linear-gradient(135deg, {NAVY} 0%, #003366 100%); 
+                                padding: 25px; border-radius: 15px; border-left: 10px solid {GOLD}; 
+                                color: white; text-align: center; margin-bottom: 25px;">
+                        <h2 style="color: {GOLD}; margin-bottom: 10px;">📈 {real_name} 대표님 맞춤형 경영 리포트</h2>
+                        <p style="font-size: 18px; margin: 0;">현재 상태: 
+                            <span style="font-weight: 700; color: {'#58D68D' if safe_score > 839 else '#F1948A'};">
+                                {"정책자금 승인 권장권" if safe_score > 839 else "신용 관리 집중 필요"}
+                            </span>
                         </p>
                     </div>
                 """, unsafe_allow_html=True)
-                
-                st.divider()
 
                 m1, m2, m3 = st.columns(3)
                 m1.metric("성함", real_name)
                 m2.metric("최신 신용점수", f"{safe_score} 점")
                 m3.metric("최신 월 매출액", f"{safe_sales:,} 만원")
 
+                st.divider()
+
                 col1, col2 = st.columns(2)
                 x_ax = alt.X('날짜:N', title='데이터 입력일', axis=alt.Axis(labelAngle=0, labelColor='black'))
 
                 with col1:
                     st.subheader("🛡️ 신용점수 분석 추이")
-                    # 💡 [필수 복구] 실수로 지웠던 zero=False 를 다시 부활시켰습니다!
+                    # 500 ~ 999 고정 및 0점 시작 방지
                     base = alt.Chart(df).encode(
                         x=x_ax, 
-                        y=alt.Y('점수:Q', scale=alt.Scale(domain=[500, 999], zero=False, clamp=True), title='점수', axis=alt.Axis(labelColor='black'))
+                        y=alt.Y('점수:Q', scale=alt.Scale(domain=[500, 999], zero=False, clamp=True), title='점수')
                     )
                     rule = alt.Chart(pd.DataFrame({'y': [839]})).mark_rule(strokeDash=[5,5], color='gray').encode(y='y:Q')
                     
@@ -130,22 +168,16 @@ if st.session_state.get("authentication_status") == True:
 
                 with col2:
                     st.subheader("💰 월 매출 성장 추이")
-                    
-                    # 💡 [혁신적 해결] 엔진을 뻗게 만드는 복잡한 수식을 삭제하고, Y축을 0.0 ~ 2.0(억)으로 깔끔하게 그립니다.
+                    # 억원 단위 스케일링으로 축 오류 원천 차단
                     base_s = alt.Chart(df).encode(
                         x=x_ax, 
-                        y=alt.Y('매출_억:Q', scale=alt.Scale(domain=[0, 2], clamp=True), title='매출 (단위: 억원)', 
-                                axis=alt.Axis(
-                                    values=[0, 0.5, 1.0, 1.5, 2.0], 
-                                    format=".1f",  # 0.0, 0.5, 1.0 형태로 고정 출력
-                                    labelColor='black'
-                                ))
+                        y=alt.Y('매출_억:Q', scale=alt.Scale(domain=[0, 2], clamp=True), title='매출 (단위: 억원)',
+                                axis=alt.Axis(values=[0, 0.5, 1.0, 1.5, 2.0], format=".1f", labelColor='black'))
                     )
                     
                     chart2 = alt.layer(
                         base_s.mark_line(color='#0068c9', size=3), 
                         base_s.mark_circle(size=150, color='#0068c9'),
-                        # 점 위에는 '1,300' 이라는 원래 텍스트가 정상적으로 표시됩니다.
                         base_s.mark_text(dy=-20, fontSize=15, fontWeight='bold', color='black', clip=False).encode(text='매출_텍스트:N')
                     ).properties(height=350)
                     
@@ -153,13 +185,14 @@ if st.session_state.get("authentication_status") == True:
                     st.caption("※ 차트 범위: 0원 ~ 2억 원")
 
                 st.divider()
-                st.subheader("💡 공민준 센터장의 핵심 경영 제언")
-                st.info(latest.get('strategy_comment', "제언 수립 중입니다."))
+                st.subheader("💡 경영 핵심 제언")
+                st.info(latest.get('strategy_comment', "전문가의 분석 결과가 수립 중입니다."))
                 
+            else: st.warning("발행된 리포트가 없습니다.")
         except Exception as e:
-             st.error(f"시스템 오류: {e}")
+             st.error(f"데이터 렌더링 중 오류 발생: {e}")
 
-elif st.session_state.get("authentication_status") == False:
-    st.error('아이디 또는 비밀번호를 확인해 주세요.')
-elif st.session_state.get("authentication_status") == None:
-    st.info('로그인해 주세요.')
+elif st.session_state.get("authentication_status") is False:
+    st.error('아이디 또는 비밀번호가 일치하지 않습니다.')
+elif st.session_state.get("authentication_status") is None:
+    st.info('제공받으신 CEO 계정으로 로그인해 주세요.')
