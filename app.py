@@ -13,7 +13,7 @@ st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide"
 NAVY = "#001F3F"
 GOLD = "#D4AF37"
 
-# 스타일 시트 (상단 에러 메시지 노출 방지 및 디자인 통합)
+# 스타일 시트 (상단 에러 방지 및 디자인 통합)
 style_code = f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;500;700&display=swap');
@@ -40,7 +40,7 @@ style_code = f"""
         padding: 0.5rem 1rem !important;
     }}
 
-    /* 레이아웃 최적화 */
+    /* 레이아웃 및 헤더 최적화 */
     .block-container {{ 
         padding-top: 1rem !important; 
         margin-top: -30px !important; 
@@ -62,10 +62,11 @@ style_code = f"""
 st.markdown(style_code, unsafe_allow_html=True)
 
 # ------------------------------------------
-# [필수] Supabase 연결 정보 (민준님의 키를 입력하세요)
+# [필수] Supabase 연결 정보 (키 값을 꼭 확인하세요!)
 # ------------------------------------------
 SUPABASE_URL = "https://pjpnaqyyzlkolnfvlpps.supabase.co"
-SUPABASE_KEY = "여기에_발급받으신_공용_API_키를_넣으세요"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBqcG5hcXl5emxrb2xuZnZscHBzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxOTEwNzgsImV4cCI6MjA5MTc2NzA3OH0.Y1kR473B-XdxnZZG3akAsp6kvGxTIL1S8IG7is8mgMM"
+
 
 @st.cache_resource(show_spinner=False)
 def init_connection():
@@ -83,15 +84,15 @@ except Exception as e:
 def fetch_users():
     try:
         response = supabase.table('users').select('*').execute()
-        credentials = {'usernames': {}}
+        creds = {'usernames': {}}
         for user in response.data:
-            credentials['usernames'][user['username']] = {
+            creds['usernames'][user['username']] = {
                 'email': f"{user['username']}@ceo.com", 
                 'name': user['name'], 
                 'password': user['password'], 
                 'role': user['role']
             }
-        return credentials
+        return creds
     except: return {'usernames': {}}
 
 credentials = fetch_users()
@@ -103,13 +104,14 @@ authenticator.login('main')
 
 if st.session_state.get("authentication_status"):
     username = st.session_state["username"]
+    # 💡 에러 방지를 위한 안전한 변수 추출
     user_info = credentials['usernames'].get(username, {})
     user_role = user_info.get('role', 'viewer')
     real_name = user_info.get('name', username)
     
     with st.sidebar:
         st.write(f"### 💼 CEO 전용 채널")
-        st.write(f"**{real_name}**님 반갑습니다.")
+        st.write(f"**{real_name}**님 환영합니다.")
         authenticator.logout('시스템 로그아웃', 'sidebar')
 
     # ------------------------------------------
@@ -142,7 +144,7 @@ if st.session_state.get("authentication_status"):
                         data = {"client_id": selected_client, "credit_score": new_score, 
                                 "monthly_sales": new_sales, "strategy_comment": new_strategy}
                         supabase.table('client_data').insert(data).execute()
-                        st.success(f"{credentials['usernames'][selected_client]['name']} 대표님의 데이터가 저장되었습니다!")
+                        st.success(f"저장 성공! {credentials['usernames'][selected_client]['name']} 대표님 리포트가 업데이트되었습니다.")
                         st.rerun()
 
         # [Tab 2: 고객 등록 및 관리]
@@ -157,12 +159,11 @@ if st.session_state.get("authentication_status"):
                 
                 if st.form_submit_button("고객 등록 및 ID 생성"):
                     if not reg_name or not reg_pw or len(reg_phone) < 4:
-                        st.warning("정보를 모두 입력해 주세요.")
+                        st.warning("정보를 모두 입력해 주세요. (휴대폰 번호 4자리 이상 필수)")
                     else:
                         generated_id = f"kdj{reg_phone[-4:]}"
                         try:
-                            # 💡 [핵심 수정] Hasher.hash_passwords 클래스 메서드를 직접 호출하여 TypeError를 해결했습니다.
-                            # 리스트 형태로 전달하고 첫 번째 결과값을 가져옵니다.
+                            # 💡 Hasher 에러 해결: 최신 라이브러리 방식 적용
                             hashed_pw = stauth.Hasher.hash_passwords([str(reg_pw)])[0]
                             
                             new_user = {
@@ -180,11 +181,9 @@ if st.session_state.get("authentication_status"):
             
             st.divider()
             st.subheader("현재 등록된 고객 리스트")
-            client_list = [{"ID": k, "이름": v['name']} for k, v in credentials['usernames'].items() if v['role'] != 'admin']
-            if client_list:
-                st.table(pd.DataFrame(client_list))
-            else:
-                st.write("등록된 고객이 없습니다.")
+            client_data_list = [{"ID": k, "이름": v['name']} for k, v in credentials['usernames'].items() if v['role'] != 'admin']
+            if client_data_list:
+                st.table(pd.DataFrame(client_data_list))
 
         # [Tab 3: 전체 리포트 이력]
         with tab3:
@@ -194,8 +193,6 @@ if st.session_state.get("authentication_status"):
                 all_df = pd.DataFrame(all_res.data)
                 all_df['고객명'] = all_df['client_id'].apply(lambda x: credentials['usernames'].get(x, {}).get('name', x))
                 st.dataframe(all_df[['created_at', '고객명', 'credit_score', 'monthly_sales', 'strategy_comment']], use_container_width=True)
-            else:
-                st.write("발행된 리포트 기록이 없습니다.")
 
     # ------------------------------------------
     # 📈 [VIEWER] 고객 리포트 화면
@@ -208,6 +205,7 @@ if st.session_state.get("authentication_status"):
                 df['created_at'] = pd.to_datetime(df['created_at']).dt.tz_localize(None)
                 df['날짜'] = df['created_at'].dt.strftime('%Y-%m-%d')
                 
+                # 수치 정제 및 억 단위 스케일링
                 df['점수'] = pd.to_numeric(df['credit_score']).astype(int)
                 df['매출'] = pd.to_numeric(df['monthly_sales']).astype(int)
                 df['매출_억'] = df['매출'] / 10000.0
@@ -217,7 +215,7 @@ if st.session_state.get("authentication_status"):
 
                 latest = df.iloc[-1]
                 
-                # 프리미엄 헤더 배너
+                # 프리미엄 배너
                 st.markdown(f"""
                     <div style="background: linear-gradient(135deg, {NAVY} 0%, #003366 100%); 
                                 padding: 30px; border-radius: 15px; border-left: 10px solid {GOLD}; 
@@ -232,7 +230,7 @@ if st.session_state.get("authentication_status"):
                 """, unsafe_allow_html=True)
 
                 m1, m2, m3 = st.columns(3)
-                m1.metric("성함", real_name)
+                m1.metric("성함", real_name) # 💡 여기서 credentials 접근 에러를 수정했습니다!
                 m2.metric("최신 신용점수", f"{int(latest['점수'])} 점")
                 m3.metric("최신 월 매출액", f"{int(latest['매출']):,} 만원")
 
