@@ -164,8 +164,8 @@ if st.session_state["authentication_status"] == True:
                     st.altair_chart(alt.layer(line_s, point_s, text_s).properties(height=350), use_container_width=True)
 
                 st.divider()
-                st.subheader("💡 공민준 센터장의 핵심 경영 제언")
-                st.info(latest.get('strategy_comment', "제언 수립 중입니다."))
+                st.subheader("💡 공민준 센터장의 핵심 경영 방향")
+                st.info(latest.get('strategy_comment', "방향 수립 중입니다."))
                 
             else: st.warning("아직 발행된 리포트가 없습니다.")
         except Exception as e:
