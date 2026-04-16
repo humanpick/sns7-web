@@ -14,7 +14,7 @@ st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide"
 NAVY = "#001F3F"
 GOLD = "#D4AF37"
 
-# 스타일 시트 (상단 에러 방지 및 디자인 통합)
+# 💡 [해결] f-string 외부에서 스타일을 정의하고 중괄호를 이중으로 써서 충돌을 완벽 차단합니다.
 style_code = f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;500;700&display=swap');
@@ -49,7 +49,7 @@ style_code = f"""
     header {{ visibility: hidden !important; height: 0px !important; }}
     [data-testid="stElementActions"], .vega-actions {{ display: none !important; }}
     
-    /* 메트릭 카드 디자인 */
+    /* 카드형 메트릭 디자인 */
     div[data-testid="metric-container"] {{
         background-color: white !important;
         border: 1px solid #E0E0E0 !important;
@@ -95,6 +95,7 @@ def fetch_users():
     except: return {'usernames': {}}
 
 credentials = fetch_users()
+# 세션 유지를 위한 인증 설정
 authenticator = stauth.Authenticate(credentials, 'ceo_portal_cookie', 'signature_key', cookie_expiry_days=30)
 
 # 로그인 화면
@@ -110,7 +111,7 @@ if st.session_state.get("authentication_status"):
         authenticator.logout('시스템 로그아웃', 'sidebar')
 
     # ------------------------------------------
-    # 👑 [ADMIN] 관리자 대시보드 (데이터 입력 및 고객 관리)
+    # 👑 [ADMIN] 관리자 대시보드
     # ------------------------------------------
     if user_role == 'admin':
         st.title("👑 관리자 데이터 센터")
@@ -139,7 +140,7 @@ if st.session_state.get("authentication_status"):
                         data = {"client_id": selected_client, "credit_score": new_score, 
                                 "monthly_sales": new_sales, "strategy_comment": new_strategy}
                         supabase.table('client_data').insert(data).execute()
-                        st.success(f"{credentials['usernames'][selected_client]['name']} 대표님의 데이터가 저장되었습니다!")
+                        st.success(f"성공! {credentials['usernames'][selected_client]['name']} 대표님의 리포트가 업데이트되었습니다.")
                         st.rerun()
 
         # [Tab 2: 고객 등록 및 관리]
@@ -158,9 +159,8 @@ if st.session_state.get("authentication_status"):
                     else:
                         generated_id = f"kdj{reg_phone[-4:]}"
                         try:
-                            # 💡 Hasher 유형 오류 방지를 위한 안전한 암호화 로직
-                            hashed_pw_list = stauth.Hasher([str(reg_pw)]).generate()
-                            hashed_pw = hashed_pw_list[0]
+                            # 💡 [핵심 수정] 최신 라이브러리 버전에 맞는 암호화 함수로 교체하여 TypeError를 해결했습니다.
+                            hashed_pw = stauth.Hasher.hash_passwords([str(reg_pw)])[0]
                             
                             new_user = {
                                 "username": generated_id, 
@@ -173,7 +173,7 @@ if st.session_state.get("authentication_status"):
                             st.success(f"✅ {reg_name} 대표님 등록 완료! (아이디: {generated_id})")
                             st.rerun()
                         except Exception as e:
-                            st.error(f"등록 실패 (ID 중복 확인 필요): {e}")
+                            st.error(f"등록 실패: {e}")
             
             st.divider()
             st.subheader("현재 등록된 고객 리스트")
@@ -203,7 +203,6 @@ if st.session_state.get("authentication_status"):
                 df['created_at'] = pd.to_datetime(df['created_at']).dt.tz_localize(None)
                 df['날짜'] = df['created_at'].dt.strftime('%Y-%m-%d')
                 
-                # 수치 정제 및 억 단위 스케일링 (그래프 증발 방지용)
                 df['점수'] = pd.to_numeric(df['credit_score']).astype(int)
                 df['매출'] = pd.to_numeric(df['monthly_sales']).astype(int)
                 df['매출_억'] = df['매출'] / 10000.0
@@ -213,7 +212,6 @@ if st.session_state.get("authentication_status"):
 
                 latest = df.iloc[-1]
                 
-                # 프리미엄 네이비 헤더 배너
                 st.markdown(f"""
                     <div style="background: linear-gradient(135deg, {NAVY} 0%, #003366 100%); 
                                 padding: 30px; border-radius: 15px; border-left: 10px solid {GOLD}; 
@@ -277,7 +275,7 @@ if st.session_state.get("authentication_status"):
                 st.info(latest['strategy_comment'])
                 
             else:
-                st.warning("발행된 리포트가 없습니다. 관리자에게 문의하세요.")
+                st.warning("발행된 리포트가 없습니다.")
         except Exception as e:
              st.error(f"데이터 로딩 오류: {e}")
 
