@@ -136,7 +136,7 @@ elif st.session_state["authentication_status"] == True:
                     st.warning("고객 ID와 업체명은 필수입니다.")
 
     # ==========================================
-    # 4-B. [고객 모드] 업체 대표님 전용 (그래프 추가됨!)
+    # 4-B. [고객 모드] 업체 대표님 전용 (에러 완벽 방지)
     # ==========================================
     else:
         st.title(f"📈 {name} 대표님 맞춤형 경영 대시보드")
@@ -147,11 +147,16 @@ elif st.session_state["authentication_status"] == True:
             if res.data:
                 user_data = res.data[0] 
                 
+                # [안전장치] Supabase에서 글자로 넘어와도 무조건 숫자로 강제 변환
+                safe_score = int(user_data.get('credit_score', 0))
+                safe_sales = int(user_data.get('monthly_sales', 0))
+                safe_comment = user_data.get('strategy_comment', '')
+                
                 # 1. 핵심 숫자 요약
                 col1, col2, col3 = st.columns(3)
                 col1.metric("업체명", user_data['company_name'])
-                col2.metric("현재 신용점수", f"{user_data['credit_score']} 점")
-                col3.metric("최근 월 매출", f"{user_data['monthly_sales']:,} 만원")
+                col2.metric("현재 신용점수", f"{safe_score} 점")
+                col3.metric("최근 월 매출", f"{safe_sales:,} 만원") # 여기서 에러가 났던 부분을 완벽 해결!
                 
                 st.divider()
                 
@@ -161,26 +166,24 @@ elif st.session_state["authentication_status"] == True:
                 
                 with chart_col1:
                     st.write("**신용점수 달성률 (1000점 기준)**")
-                    # 신용점수를 퍼센트로 계산하여 게이지바로 표시 (최대 1.0)
-                    score_ratio = min(user_data['credit_score'] / 1000, 1.0)
+                    score_ratio = min(safe_score / 1000, 1.0)
                     st.progress(score_ratio)
                 
                 with chart_col2:
                     st.write("**월 매출 차트 (단위: 만원)**")
-                    # 간단한 막대그래프로 매출 표시
                     sales_df = pd.DataFrame({
                         "매출 지표": ["이번 달 매출"],
-                        "금액": [user_data['monthly_sales']]
+                        "금액": [safe_sales]
                     })
-                    st.bar_chart(sales_df, x="매출 지표", y="금액", color="#1f77b4")
+                    st.bar_chart(sales_df, x="매출 지표", y="금액")
 
                 st.divider()
                 
                 # 3. 센터장 코멘트 영역
                 st.subheader("💡 공민준 센터장의 맞춤형 경영 전략")
-                st.info(user_data['strategy_comment'])
+                st.info(safe_comment if safe_comment else "아직 등록된 전략 코멘트가 없습니다.")
                 
             else:
                 st.warning("아직 발행된 리포트가 없습니다.")
-        except:
-             st.warning("데이터베이스 연동 중입니다.")
+        except Exception as e:
+             st.warning(f"데이터를 화면에 그리는 중 문제가 발생했습니다: {e}")
