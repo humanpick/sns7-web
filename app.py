@@ -118,7 +118,8 @@ if st.session_state.get("authentication_status") == True:
                         rule, 
                         base.mark_line(color='#ff4b4b', size=3), 
                         base.mark_circle(size=150, color='#ff4b4b'), 
-                        base.mark_text(dy=-20, size=15, weight='bold', color='black', clip=False).encode(text='점수_텍스트:N')
+                        # 💡 제 어리석은 오타를 fontSize와 fontWeight로 정상 복구했습니다!
+                        base.mark_text(dy=-20, fontSize=15, fontWeight='bold', color='black', clip=False).encode(text='점수_텍스트:N')
                     ).properties(height=350)
                     
                     st.altair_chart(chart1, use_container_width=True, theme=None)
@@ -127,25 +128,24 @@ if st.session_state.get("authentication_status") == True:
                 with col2:
                     st.subheader("💰 월 매출 성장 추이")
                     
-                    # 💡 [핵심] 간격을 딱 5000(5천만원) 단위로 일정하게 통일! 
-                    # 💡 빈 눈금에는 투명하게('') 처리하여 글자 겹침으로 인한 전체 화면 뻗음(Crash) 현상을 완벽 방지합니다.
                     safe_label_expr = "datum.value == 20000 ? '2억' : datum.value == 15000 ? '1.5억' : datum.value == 10000 ? '1억' : datum.value == 5000 ? '5천만' : datum.value == 0 ? '0원' : ''"
                     
                     base_s = alt.Chart(df).encode(
                         x=x_ax, 
                         y=alt.Y('매출:Q', scale=alt.Scale(domain=[0, 20000]), title='매출', 
                                 axis=alt.Axis(
-                                    values=[0, 5000, 10000, 15000, 20000], # 간격 완벽하게 일치
+                                    values=[0, 5000, 10000, 15000, 20000],
                                     labelExpr=safe_label_expr, 
                                     labelColor='black',
-                                    tickMinStep=5000 # 💡 엔진이 임의로 자잘한 2500 단위 눈금을 긋는 것을 원천 봉쇄
+                                    tickMinStep=5000
                                 ))
                     )
                     
                     chart2 = alt.layer(
                         base_s.mark_line(color='#0068c9', size=3), 
                         base_s.mark_circle(size=150, color='#0068c9'),
-                        base_s.mark_text(dy=-20, size=15, weight='bold', color='black', clip=False).encode(text='매출_텍스트:N')
+                        # 💡 여기도 fontSize와 fontWeight로 정상 복구했습니다!
+                        base_s.mark_text(dy=-20, fontSize=15, fontWeight='bold', color='black', clip=False).encode(text='매출_텍스트:N')
                     ).properties(height=350)
                     
                     st.altair_chart(chart2, use_container_width=True, theme=None)
