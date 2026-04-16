@@ -40,7 +40,7 @@ style_code = f"""
         padding: 0.5rem 1rem !important;
     }}
 
-    /* 레이아웃 및 헤더 최적화 */
+    /* 레이아웃 최적화 */
     .block-container {{ 
         padding-top: 1rem !important; 
         margin-top: -30px !important; 
@@ -48,7 +48,7 @@ style_code = f"""
     header {{ visibility: hidden !important; height: 0px !important; }}
     [data-testid="stElementActions"], .vega-actions {{ display: none !important; }}
     
-    /* 카드형 메트릭 디자인 */
+    /* 메트릭 카드 디자인 */
     div[data-testid="metric-container"] {{
         background-color: white !important;
         border: 1px solid #E0E0E0 !important;
@@ -62,7 +62,7 @@ style_code = f"""
 st.markdown(style_code, unsafe_allow_html=True)
 
 # ------------------------------------------
-# [필수] Supabase 연결 정보 (키 값을 꼭 확인하세요!)
+# [필수] Supabase 연결 정보 (Key를 다시 확인해 주세요!)
 # ------------------------------------------
 SUPABASE_URL = "https://pjpnaqyyzlkolnfvlpps.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBqcG5hcXl5emxrb2xuZnZscHBzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxOTEwNzgsImV4cCI6MjA5MTc2NzA3OH0.Y1kR473B-XdxnZZG3akAsp6kvGxTIL1S8IG7is8mgMM"
@@ -79,25 +79,40 @@ except Exception as e:
     st.stop()
 
 # ==========================================
-# 2. 데이터베이스 및 인증 시스템
+# 2. 데이터베이스 및 인증 시스템 (구조 강화)
 # ==========================================
 def fetch_users():
     try:
         response = supabase.table('users').select('*').execute()
-        # stauth 표준 형식에 완벽하게 맞춘 딕셔너리 생성
+        # 💡 [보강] credentials 구조를 라이브러리 표준에 맞춰 강제로 고정합니다.
         creds = {'usernames': {}}
-        for user in response.data:
-            creds['usernames'][user['username']] = {
-                'name': user['name'], 
-                'password': user['password'], 
-                'role': user.get('role', 'viewer')
-            }
+        if response.data:
+            for user in response.data:
+                u_id = str(user['username'])
+                creds['usernames'][u_id] = {
+                    'name': str(user['name']), 
+                    'password': str(user['password']), 
+                    'role': str(user.get('role', 'viewer'))
+                }
         return creds
-    except: return {'usernames': {}}
+    except Exception as e:
+        # 에러 발생 시 빈 딕셔너리가 아닌 '구조가 잡힌' 딕셔너리 반환
+        return {'usernames': {}}
 
-# 데이터를 먼저 가져오고 인증기 초기화
+# 데이터를 가져옵니다.
 credentials = fetch_users()
-authenticator = stauth.Authenticate(credentials, 'ceo_portal_cookie', 'signature_key', cookie_expiry_days=30)
+
+# 💡 [핵심 방어] credentials가 딕셔너리 형태인지 최종 확인
+if not isinstance(credentials, dict) or 'usernames' not in credentials:
+    credentials = {'usernames': {}}
+
+# 인증기 초기화
+authenticator = stauth.Authenticate(
+    credentials, 
+    'ceo_portal_cookie', 
+    'signature_key', 
+    cookie_expiry_days=30
+)
 
 # 로그인 화면
 authenticator.login('main')
@@ -105,8 +120,10 @@ authenticator.login('main')
 if st.session_state.get("authentication_status"):
     username = st.session_state["username"]
     
-    # 💡 [핵심] credentials['usernames']를 통해 안전하게 접근합니다.
-    user_dict = credentials['usernames'].get(username, {})
+    # 💡 [핵심 방어] 딕셔너리 접근 시 .get()을 사용하여 에러 발생을 원천 차단
+    all_usernames = credentials.get('usernames', {})
+    user_dict = all_usernames.get(username, {})
+    
     user_role = user_dict.get('role', 'viewer')
     real_name = user_dict.get('name', username)
     
@@ -126,12 +143,12 @@ if st.session_state.get("authentication_status"):
         # [Tab 1: 데이터 입력]
         with tab1:
             st.subheader("리포트 수치 입력")
-            user_list = [u for u in credentials['usernames'] if credentials['usernames'][u]['role'] != 'admin']
+            user_list = [u for u in all_usernames if all_usernames[u].get('role') != 'admin']
             if not user_list:
                 st.info("먼저 고객을 등록해 주세요.")
             else:
                 selected_client = st.selectbox("고객을 선택하세요", user_list, 
-                                               format_func=lambda x: f"{credentials['usernames'][x]['name']} ({x})")
+                                               format_func=lambda x: f"{all_usernames[x].get('name')} ({x})")
                 
                 with st.form("data_input_form", clear_on_submit=True):
                     col1, col2 = st.columns(2)
@@ -164,7 +181,7 @@ if st.session_state.get("authentication_status"):
                     else:
                         generated_id = f"kdj{reg_phone[-4:]}"
                         try:
-                            # 💡 Hasher 에러 완전 박멸: 최신 라이브러리 방식
+                            # 💡 Hasher 에러 완전 박멸: 최신 라이브러리 표준 방식
                             hashed_pw = stauth.Hasher.hash_passwords([str(reg_pw)])[0]
                             
                             new_user = {
@@ -182,9 +199,9 @@ if st.session_state.get("authentication_status"):
             
             st.divider()
             st.subheader("현재 등록된 고객 리스트")
-            client_data_list = [{"ID": k, "이름": v['name']} for k, v in credentials['usernames'].items() if v['role'] != 'admin']
-            if client_data_list:
-                st.table(pd.DataFrame(client_data_list))
+            client_display = [{"ID": k, "이름": v.get('name')} for k, v in all_usernames.items() if v.get('role') != 'admin']
+            if client_display:
+                st.table(pd.DataFrame(client_display))
 
         # [Tab 3: 전체 리포트 이력]
         with tab3:
@@ -192,12 +209,11 @@ if st.session_state.get("authentication_status"):
             all_res = supabase.table('client_data').select('*').order('created_at', desc=True).execute()
             if all_res.data:
                 all_df = pd.DataFrame(all_res.data)
-                # 안전한 매핑
-                all_df['고객명'] = all_df['client_id'].apply(lambda x: credentials['usernames'].get(x, {}).get('name', x))
+                all_df['고객명'] = all_df['client_id'].apply(lambda x: all_usernames.get(x, {}).get('name', x))
                 st.dataframe(all_df[['created_at', '고객명', 'credit_score', 'monthly_sales', 'strategy_comment']], use_container_width=True)
 
     # ------------------------------------------
-    # 📈 [VIEWER] 고객 리포트 화면
+    # 📈 [VIEWER] 고객 리포트 화면 (무결성 프로토콜 적용)
     # ------------------------------------------
     else:
         try:
@@ -288,4 +304,4 @@ if st.session_state.get("authentication_status"):
 elif st.session_state.get("authentication_status") is False:
     st.error('아이디 또는 비밀번호를 다시 확인해 주세요.')
 elif st.session_state.get("authentication_status") is None:
-    st.info('제공받으신 CEO 계정 정보를 입력하여 로그인해 주세요.')
+    st.info('발급받으신 CEO 계정 정보를 입력하여 로그인해 주세요.')
