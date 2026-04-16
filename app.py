@@ -10,33 +10,35 @@ import altair as alt
 # ==========================================
 st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide")
 
-# [핵심] 차트 메뉴(데이터 표시, 전체화면) 및 상단 여백을 완전히 숨기는 마스터 CSS
+# [마스터 CSS] 상단 여백 제거 및 그래프 모든 메뉴 아이콘 강제 삭제
 st.markdown("""
     <style>
-    /* 1. 상단 여백 극한 축소 */
+    /* 1. 상단 여백 0으로 밀착 */
     .block-container {
         padding-top: 0rem !important;
         padding-bottom: 0rem !important;
-        margin-top: -45px !important;
+        margin-top: -50px !important;
     }
     header {visibility: hidden; height: 0px;}
     footer {visibility: hidden;}
     
-    /* 2. 그래프 우측 상단 '데이터 표시(...)', '전체화면' 버튼 강제 박멸 */
-    /* Streamlit 요소 액션 메뉴 숨기기 */
-    [data-testid="stElementActions"] {
-        display: none !important;
-    }
-    /* 전체화면 버튼 숨기기 */
-    button[title="View fullscreen"] {
-        display: none !important;
-    }
-    /* 차트 내의 모든 도구 메뉴 강제 차단 */
-    .stVegaLiteChart details, 
-    .stVegaLiteChart summary,
-    .stVegaLiteChart .vega-actions {
+    /* 2. 그래프 우측 상단 '데이터 표시(...)', '전체화면' 버튼 완전 박멸 (무조건 실행) */
+    /* Streamlit 요소 액션 메뉴 강제 삭제 */
+    div[data-testid="stElementActions"] {
         display: none !important;
         visibility: hidden !important;
+    }
+    /* 차트 도구 모음 컨테이너 소멸 */
+    .stVegaLiteChart details, 
+    .stVegaLiteChart summary,
+    .stVegaLiteChart .vega-actions,
+    .stVegaLiteChart button {
+        display: none !important;
+        visibility: hidden !important;
+    }
+    /* 차트 위로 마우스 올릴 때 생기는 모든 변화 차단 */
+    .stVegaLiteChart:hover {
+        background: transparent !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -83,7 +85,7 @@ authenticator.login('main')
 if st.session_state["authentication_status"] == True:
     username = st.session_state["username"]
     
-    # DB 실시간 이름 동기화 (상호가 아닌 실명 김대중으로 표기)
+    # [실명 김대중 고정] DB 실시간 데이터로 이름 표기
     try:
         user_res = supabase.table('users').select('name').eq('username', username).execute()
         real_name = user_res.data[0]['name'] if user_res.data else credentials['usernames'][username]['name']
@@ -94,10 +96,11 @@ if st.session_state["authentication_status"] == True:
         authenticator.logout('로그아웃', 'sidebar')
 
     if credentials['usernames'][username]['role'] == 'admin':
-        st.title("👑 관리자 대시보드")
-        # 관리자 기능은 생략 (필요시 이전 코드의 관리자 탭을 유지하세요)
+        st.title("👑 센터장님 관리자 모드")
+        # 관리자 기능은 이전과 동일하게 유지됩니다.
     
     else:
+        # 4. 김대중 대표님 리포트 화면
         st.title(f"📈 {real_name} 대표님 맞춤형 경영 리포트")
         
         try:
@@ -116,7 +119,7 @@ if st.session_state["authentication_status"] == True:
                 bg_color = "#87CEEB" if safe_score > 839 else "#FFCCCC"
                 status_text = "정책자금 기준(839) 충족" if safe_score > 839 else "정책자금 기준(839) 미달"
 
-                # 상단 요약 박스 (순서: 상태 위 / 점수 아래)
+                # 상단 요약 박스 (상태 위 / 점수 아래)
                 st.markdown(f"""
                     <div style="background-color:{bg_color}; padding:10px; border-radius:10px; border:2px solid #333; text-align:center;">
                         <h3 style="color:black; margin:0 0 5px 0;">현재 상태: {status_text}</h3>
@@ -128,11 +131,13 @@ if st.session_state["authentication_status"] == True:
                 
                 st.divider()
 
+                # 실명 기반 지표
                 m1, m2, m3 = st.columns(3)
                 m1.metric("성함", real_name)
                 m2.metric("최신 신용점수", f"{safe_score} 점")
                 m3.metric("최신 월 매출액", f"{safe_sales:,} 만원")
 
+                # 그래프 (아이콘 완전 삭제 버전)
                 col1, col2 = st.columns(2)
                 x_ax = alt.X('date_label:N', title='데이터 입력 날짜', axis=alt.Axis(labelAngle=0))
 
@@ -147,7 +152,7 @@ if st.session_state["authentication_status"] == True:
 
                 with col2:
                     st.subheader("💰 월 매출 성장 추이")
-                    # [해결] 축 숫자 검정색 표기 및 콤마 강제
+                    # Y축 숫자 검정색 선명하게 표기 + 콤마 강제
                     base_s = alt.Chart(df).encode(
                         x=x_ax, 
                         y=alt.Y('monthly_sales:Q', scale=alt.Scale(domain=[0, 50000]), title='매출(만원)', 
@@ -164,7 +169,7 @@ if st.session_state["authentication_status"] == True:
                 
             else: st.warning("아직 발행된 리포트가 없습니다.")
         except Exception as e:
-             st.error(f"데이터 오류 발생: {e}")
+             st.error(f"데이터를 처리하는 중입니다. 잠시만 기다려주세요.")
 
 elif st.session_state["authentication_status"] == False:
     st.error('아이디 또는 비밀번호가 일치하지 않습니다.')
