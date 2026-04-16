@@ -10,17 +10,11 @@ import altair as alt
 # ==========================================
 st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide")
 
-# [핵심] 차트 메뉴(데이터 표시, 전체화면)를 완전히 숨기는 CSS
+# [핵심] 차트 우측 상단 메뉴, 전체화면 버튼 영구 삭제
 st.markdown("""
     <style>
-    /* 차트 우측 상단 도구 모음 숨기기 */
-    [data-testid="stElementActions"] {
-        display: none !important;
-    }
-    /* 전체화면 버튼 숨기기 */
-    button[title="View fullscreen"] {
-        display: none !important;
-    }
+    [data-testid="stElementActions"] {display: none !important;}
+    button[title="View fullscreen"] {display: none !important;}
     </style>
 """, unsafe_allow_html=True)
 
@@ -145,7 +139,7 @@ elif st.session_state["authentication_status"] == True:
                         st.error(f"저장 실패: {e}")
 
     # ==========================================
-    # 4-B. [고객 모드] 업체 대표님 전용 (UI 정제)
+    # 4-B. [고객 모드] 업체 대표님 전용 (최종 수정본)
     # ==========================================
     else:
         st.title(f"📈 {name} 대표님 맞춤형 경영 리포트")
@@ -155,21 +149,30 @@ elif st.session_state["authentication_status"] == True:
             
             if res.data:
                 df = pd.DataFrame(res.data)
+                
                 if 'created_at' not in df.columns:
                     df['created_at'] = '2026-01-01T00:00:00'
                 
+                df['created_at'] = pd.to_datetime(df['created_at']).dt.tz_localize(None)
                 df = df.sort_values('created_at')
-                df['입력일시'] = df['created_at'].astype(str).str[:10]
-                df['신용점수'] = pd.to_numeric(df['credit_score'], errors='coerce').fillna(0).astype(int)
-                df['매출(만원)'] = pd.to_numeric(df['monthly_sales'], errors='coerce').fillna(0).astype(int)
+
+                if len(df) == 1:
+                    dummy = df.iloc[[0]].copy()
+                    dummy['created_at'] = dummy['created_at'] - pd.Timedelta(minutes=1)
+                    df = pd.concat([dummy, df], ignore_index=True)
+
+                # [해결 3] 날짜 뒤에 시:분:초 까지 붙여서 테스트 데이터가 안 뭉치게 강제 분리!
+                df['date_label'] = df['created_at'].dt.strftime('%m-%d %H:%M:%S')
                 
-                # 강제 텍스트 변환
-                df['점수표기'] = df['신용점수'].astype(str)
-                df['매출표기'] = df['매출(만원)'].apply(lambda x: f"{x:,}")
+                df['score_num'] = pd.to_numeric(df['credit_score'], errors='coerce').fillna(0).astype(int)
+                df['sales_num'] = pd.to_numeric(df['monthly_sales'], errors='coerce').fillna(0).astype(int)
+                
+                df['score_str'] = df['score_num'].astype(str)
+                df['sales_str'] = df['sales_num'].apply(lambda x: f"{x:,}")
                 
                 latest_data = df.iloc[-1]
-                safe_score = int(latest_data['신용점수'])
-                safe_sales = int(latest_data['매출(만원)'])
+                safe_score = int(latest_data['score_num'])
+                safe_sales = int(latest_data['sales_num'])
                 
                 bg_color = "#87CEEB" if safe_score > 839 else "#FFCCCC"
                 status_text = "정책자금 기준(839) 충족" if safe_score > 839 else "정책자금 기준(839) 미달"
@@ -190,22 +193,21 @@ elif st.session_state["authentication_status"] == True:
                 m2.metric("최신 신용점수", f"{safe_score} 점")
                 m3.metric("최신 월 매출액", f"{safe_sales:,} 만원")
 
-                # --- 그래프 섹션 (레이어 방식 + 메뉴 숨김 적용) ---
                 col1, col2 = st.columns(2)
                 
-                # X축 범주형 지정
-                x_axis = alt.X('입력일시:N', title='데이터 입력 날짜', axis=alt.Axis(labelAngle=0))
+                # 라벨을 대각선(-45도)으로 눕혀서 시간이 길어져도 안 겹치게 만듦
+                x_axis = alt.X('date_label:N', title='데이터 입력 시간', axis=alt.Axis(labelAngle=-45))
 
                 with col1:
                     st.subheader("🛡️ 신용점수 분석 추이")
                     base_score = alt.Chart(df).encode(
                         x=x_axis,
-                        y=alt.Y('신용점수:Q', scale=alt.Scale(domain=[0, 999]), title='신용점수 (0~999점)', axis=alt.Axis(values=[0, 200, 400, 600, 800, 999]))
+                        y=alt.Y('score_num:Q', scale=alt.Scale(domain=[0, 999]), title='신용점수 (0~999점)', axis=alt.Axis(values=[0, 200, 400, 600, 800, 999]))
                     )
                     rule_score = alt.Chart(pd.DataFrame({'y': [839]})).mark_rule(strokeDash=[5, 5], color='gray').encode(y='y:Q')
                     line_score = base_score.mark_line(color='#ff4b4b', size=3)
                     point_score = base_score.mark_circle(color='#ff4b4b', size=150)
-                    text_score = base_score.mark_text(dy=-25, fontSize=15, fontWeight='bold', color='black').encode(text='점수표기:N')
+                    text_score = base_score.mark_text(dy=-25, fontSize=15, fontWeight='bold', color='black').encode(text='score_str:N')
                     
                     st.altair_chart(alt.layer(rule_score, line_score, point_score, text_score).properties(height=350), use_container_width=True)
                     st.caption("※ 회색 점선: 정책자금 권장 기준선 (839점)")
@@ -214,11 +216,13 @@ elif st.session_state["authentication_status"] == True:
                     st.subheader("💰 월 매출 성장 추이")
                     base_sales = alt.Chart(df).encode(
                         x=x_axis,
-                        y=alt.Y('매출(만원):Q', scale=alt.Scale(domain=[0, 50000]), title='월 매출액 (만원)', axis=alt.Axis(format=",.0f", values=[0, 10000, 20000, 30000, 40000, 50000]))
+                        # [해결 2] 0~5만 배열을 못 박아버리고, labelExpr로 콤마를 강제로 찍어버림!
+                        y=alt.Y('sales_num:Q', scale=alt.Scale(domain=[0, 50000]), title='월 매출액 (만원)', 
+                                axis=alt.Axis(values=[0, 10000, 20000, 30000, 40000, 50000], labelExpr="format(datum.value, ',')"))
                     )
                     line_sales = base_sales.mark_line(color='#0068c9', size=3)
                     point_sales = base_sales.mark_circle(color='#0068c9', size=150)
-                    text_sales = base_sales.mark_text(dy=-25, fontSize=15, fontWeight='bold', color='black').encode(text='매출표기:N')
+                    text_sales = base_sales.mark_text(dy=-25, fontSize=15, fontWeight='bold', color='black').encode(text='sales_str:N')
                     
                     st.altair_chart(alt.layer(line_sales, point_sales, text_sales).properties(height=350), use_container_width=True)
                     st.caption("※ 차트 범위: 0원 ~ 5억 원 (50,000만 원)")
