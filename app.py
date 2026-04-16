@@ -106,7 +106,6 @@ if st.session_state.get("authentication_status") == True:
 
                 with col1:
                     st.subheader("🛡️ 신용점수 분석 추이")
-                    # 💡 [해결 1] zero=False를 명시하여 0점을 완전히 배제하고 500부터 시작
                     base = alt.Chart(df).encode(
                         x=x_ax, 
                         y=alt.Y('점수:Q', scale=alt.Scale(domain=[500, 1000], zero=False), title='점수', axis=alt.Axis(labelColor='black'))
@@ -125,11 +124,18 @@ if st.session_state.get("authentication_status") == True:
 
                 with col2:
                     st.subheader("💰 월 매출 성장 추이")
-                    # 💡 [해결 2] 한글을 빼고, 요청하신 간격의 숫자를 format=","로 강제 지정
+                    
+                    # 💡 [진짜 해결] 엔진의 계산을 완전히 무시하고, 지정한 한글(1억, 5억 등)을 축에 강제로 박아넣는 코드입니다.
+                    label_expression = "datum.value == 50000 ? '5억' : datum.value == 30000 ? '3억' : datum.value == 20000 ? '2억' : datum.value == 10000 ? '1억' : datum.value == 5000 ? '5000만' : datum.value == 3000 ? '3000만' : datum.value == 2000 ? '2000만' : datum.value == 1000 ? '1000만' : '0원'"
+                    
                     base_s = alt.Chart(df).encode(
                         x=x_ax, 
-                        y=alt.Y('매출:Q', scale=alt.Scale(domain=[0, 50000]), title='매출(단위: 만원)', 
-                                axis=alt.Axis(values=[0, 1000, 2000, 3000, 5000, 10000, 20000, 30000, 50000], format=",", labelColor='black'))
+                        y=alt.Y('매출:Q', scale=alt.Scale(domain=[0, 50000], nice=False, clamp=True), title='매출', 
+                                axis=alt.Axis(
+                                    values=[0, 1000, 2000, 3000, 5000, 10000, 20000, 30000, 50000], 
+                                    labelExpr=label_expression, 
+                                    labelColor='black'
+                                ))
                     )
                     
                     chart2 = alt.layer(
@@ -139,7 +145,6 @@ if st.session_state.get("authentication_status") == True:
                     ).properties(height=350)
                     
                     st.altair_chart(chart2, use_container_width=True, theme=None)
-                    st.caption("※ Y축 10,000 = 1억 원 / 차트 범위: 0원 ~ 5억 원")
 
                 st.divider()
                 st.subheader("💡 공민준 센터장의 핵심 경영 제언")
