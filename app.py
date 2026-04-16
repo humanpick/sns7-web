@@ -131,7 +131,7 @@ elif st.session_state["authentication_status"] == True:
                         st.error(f"저장 실패: {e}")
 
     # ==========================================
-    # 4-B. [고객 모드] 업체 대표님 전용 (그래프 최종 완성)
+    # 4-B. [고객 모드] 업체 대표님 전용 (버그 원천 차단)
     # ==========================================
     else:
         st.title(f"📈 {name} 대표님 맞춤형 경영 리포트")
@@ -141,13 +141,20 @@ elif st.session_state["authentication_status"] == True:
             
             if res.data:
                 df = pd.DataFrame(res.data)
+                
                 if 'created_at' not in df.columns:
                     df['created_at'] = '2026-01-01T00:00:00'
                 
                 df = df.sort_values('created_at')
                 df['입력일시'] = df['created_at'].astype(str).str[:10]
+                
+                # 에러 방지: 숫자로 명확히 변환
                 df['신용점수'] = pd.to_numeric(df['credit_score'], errors='coerce').fillna(0).astype(int)
                 df['매출(만원)'] = pd.to_numeric(df['monthly_sales'], errors='coerce').fillna(0).astype(int)
+                
+                # 💡 [핵심 해결] 파이썬에서 미리 텍스트(글자)로 콤마까지 찍어버립니다!
+                df['점수표기'] = df['신용점수'].astype(str)
+                df['매출표기'] = df['매출(만원)'].apply(lambda x: f"{x:,}")
                 
                 latest_data = df.iloc[-1]
                 safe_score = int(latest_data['신용점수'])
@@ -178,34 +185,32 @@ elif st.session_state["authentication_status"] == True:
                 with col1:
                     st.subheader("🛡️ 신용점수 분석 추이")
                     
-                    # Y축을 0~999로 엄격히 고정
                     base_score = alt.Chart(df).encode(
-                        x=alt.X('입력일시:N', title='데이터 입력 날짜'),
-                        y=alt.Y('신용점수:Q', scale=alt.Scale(domain=[0, 999]), title='신용점수 (0~999점)')
+                        x=alt.X('입력일시:N', title='데이터 입력 날짜', axis=alt.Axis(labelAngle=0)), # 가로 눕히기 강제
+                        y=alt.Y('신용점수:Q', scale=alt.Scale(domain=[0, 999]), title='신용점수 (0~999점)', axis=alt.Axis(tickCount=6))
                     )
                     line_score = base_score.mark_line(color='#ff4b4b', point=alt.OverlayMarkDef(color='#ff4b4b', size=150))
                     
-                    # [수정] 글자가 바닥에 잘리지 않도록 점의 위쪽(dy=-20)으로 살짝 띄웠습니다!
-                    text_score = base_score.mark_text(dy=-20, fontSize=16, fontWeight='bold', color='black').encode(text=alt.Text('신용점수:Q'))
+                    # 미리 만든 '점수표기' 텍스트를 그대로 출력
+                    text_score = base_score.mark_text(dy=-20, fontSize=16, fontWeight='bold', color='black').encode(text=alt.Text('점수표기:N'))
                     rule_score = alt.Chart(pd.DataFrame({'y': [839]})).mark_rule(strokeDash=[5, 5], color='gray').encode(y='y:Q')
                     
-                    st.altair_chart((rule_score + line_score + text_score).properties(height=350), use_container_width=True)
+                    st.altair_chart((rule_score + line_score + text_score).properties(height=350), use_container_width=True, theme=None)
                     st.caption("※ 회색 점선: 정책자금 권장 기준선 (839점)")
 
                 with col2:
                     st.subheader("💰 월 매출 성장 추이")
                     
-                    # Y축을 0~50,000으로 엄격히 고정
                     base_sales = alt.Chart(df).encode(
-                        x=alt.X('입력일시:N', title='데이터 입력 날짜'),
-                        y=alt.Y('매출(만원):Q', scale=alt.Scale(domain=[0, 50000]), title='월 매출액 (만원)')
+                        x=alt.X('입력일시:N', title='데이터 입력 날짜', axis=alt.Axis(labelAngle=0)), # 가로 눕히기 강제
+                        y=alt.Y('매출(만원):Q', scale=alt.Scale(domain=[0, 50000]), title='월 매출액 (만원)', axis=alt.Axis(tickCount=6))
                     )
                     line_sales = base_sales.mark_line(color='#0068c9', point=alt.OverlayMarkDef(color='#0068c9', size=150))
                     
-                    # [수정] 글자가 안 잘리게 위로 올리고, 천 단위 콤마(,) 포맷팅 유지
-                    text_sales = base_sales.mark_text(dy=-20, fontSize=16, fontWeight='bold', color='black').encode(text=alt.Text('매출(만원):Q', format=','))
+                    # 미리 만든 '매출표기(콤마포함)' 텍스트를 그대로 출력
+                    text_sales = base_sales.mark_text(dy=-20, fontSize=16, fontWeight='bold', color='black').encode(text=alt.Text('매출표기:N'))
                     
-                    st.altair_chart((line_sales + text_sales).properties(height=350), use_container_width=True)
+                    st.altair_chart((line_sales + text_sales).properties(height=350), use_container_width=True, theme=None)
                     st.caption("※ 차트 범위: 0원 ~ 5억 원 (50,000만 원)")
 
                 st.divider()
