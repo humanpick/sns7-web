@@ -131,7 +131,7 @@ elif st.session_state["authentication_status"] == True:
                         st.error(f"저장 실패: {e}")
 
     # ==========================================
-    # 4-B. [고객 모드] 업체 대표님 전용 (디자인 강제 제어)
+    # 4-B. [고객 모드] 업체 대표님 전용 (그래프 강제 제어 완료)
     # ==========================================
     else:
         st.title(f"📈 {name} 대표님 맞춤형 경영 리포트")
@@ -141,12 +141,11 @@ elif st.session_state["authentication_status"] == True:
             
             if res.data:
                 df = pd.DataFrame(res.data)
-                
                 if 'created_at' not in df.columns:
                     df['created_at'] = '2026-01-01T00:00:00'
                 
                 df = df.sort_values('created_at')
-                # YYYY-MM-DD 형식으로 문자열 고정
+                # 날짜를 예쁘게 자르기 (YYYY-MM-DD)
                 df['입력일시'] = df['created_at'].astype(str).str[:10]
                 
                 df['신용점수'] = pd.to_numeric(df['credit_score'], errors='coerce').fillna(0).astype(int)
@@ -178,17 +177,19 @@ elif st.session_state["authentication_status"] == True:
                 # --- 그래프 섹션 ---
                 col1, col2 = st.columns(2)
                 
+                # [핵심] X축을 Ordinal(:O)로 지정하여 데이터가 1개여도 무조건 축과 날짜를 그리도록 강제!
+                x_axis = alt.X('입력일시:O', title='데이터 입력 날짜', axis=alt.Axis(labelAngle=0))
+
                 with col1:
                     st.subheader("🛡️ 신용점수 분석 추이")
                     
-                    # [해결 1] X축을 글자(:N) 취급하여 데이터가 1개여도 날짜를 무조건 띄움
                     base_score = alt.Chart(df).encode(
-                        x=alt.X('입력일시:N', title='데이터 입력 날짜', axis=alt.Axis(labelAngle=0)),
+                        x=x_axis,
                         y=alt.Y('신용점수:Q', scale=alt.Scale(domain=[0, 999]), title='신용점수 (0~999점)', 
                                 axis=alt.Axis(values=[0, 200, 400, 600, 800, 999]))
                     )
                     line_score = base_score.mark_line(color='#ff4b4b', point=alt.OverlayMarkDef(color='#ff4b4b', size=150))
-                    text_score = base_score.mark_text(dy=-20, fontSize=16, fontWeight='bold', color='black').encode(text=alt.Text('신용점수:Q'))
+                    text_score = base_score.mark_text(dy=-25, fontSize=16, fontWeight='bold', color='black').encode(text=alt.Text('신용점수:Q'))
                     rule_score = alt.Chart(pd.DataFrame({'y': [839]})).mark_rule(strokeDash=[5, 5], color='gray').encode(y='y:Q')
                     
                     st.altair_chart((rule_score + line_score + text_score).properties(height=350), use_container_width=True)
@@ -197,16 +198,16 @@ elif st.session_state["authentication_status"] == True:
                 with col2:
                     st.subheader("💰 월 매출 성장 추이")
                     
-                    # [해결 2] X축을 글자(:N) 취급하고, Y축에 format=',' 를 걸어 1e+4 현상을 원천 차단
+                    # [핵심] format=',' 를 통해 1e+4(지수표기)를 차단하고 10,000 단위 콤마를 강제함!
                     base_sales = alt.Chart(df).encode(
-                        x=alt.X('입력일시:N', title='데이터 입력 날짜', axis=alt.Axis(labelAngle=0)),
+                        x=x_axis,
                         y=alt.Y('매출(만원):Q', scale=alt.Scale(domain=[0, 50000]), title='월 매출액 (만원)', 
                                 axis=alt.Axis(values=[0, 10000, 20000, 30000, 40000, 50000], format=','))
                     )
                     line_sales = base_sales.mark_line(color='#0068c9', point=alt.OverlayMarkDef(color='#0068c9', size=150))
                     
-                    # [해결 3] 점 위 숫자에도 format=',' 를 걸어서 1,300이 정확히 표시되도록 강제
-                    text_sales = base_sales.mark_text(dy=-20, fontSize=16, fontWeight='bold', color='black').encode(text=alt.Text('매출(만원):Q', format=','))
+                    # [핵심] format=',' 를 통해 1,300 숫자가 사라지지 않고 무조건 찍히도록 강제함! (dy=-25로 공간 확보)
+                    text_sales = base_sales.mark_text(dy=-25, fontSize=16, fontWeight='bold', color='black').encode(text=alt.Text('매출(만원):Q', format=','))
                     
                     st.altair_chart((line_sales + text_sales).properties(height=350), use_container_width=True)
                     st.caption("※ 차트 범위: 0원 ~ 5억 원 (50,000만 원)")
