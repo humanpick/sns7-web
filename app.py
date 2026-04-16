@@ -13,7 +13,6 @@ st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide"
 NAVY = "#001F3F"
 GOLD = "#D4AF37"
 
-# 스타일 시트 (상단 에러 방지 처리 완료)
 style_code = f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;500;700&display=swap');
@@ -56,7 +55,7 @@ except Exception as e:
     st.stop()
 
 # ==========================================
-# 2. 인증 및 데이터 로딩
+# 2. 데이터베이스 통신 함수
 # ==========================================
 def fetch_users():
     try:
@@ -70,6 +69,9 @@ def fetch_users():
         return credentials
     except: return {'usernames': {}}
 
+# ==========================================
+# 3. 사용자 인증 시스템
+# ==========================================
 credentials = fetch_users()
 authenticator = stauth.Authenticate(credentials, 'ceo_portal_cookie', 'signature_key', cookie_expiry_days=30)
 authenticator.login('main')
@@ -84,53 +86,79 @@ if st.session_state.get("authentication_status"):
         authenticator.logout('시스템 로그아웃', 'sidebar')
 
     # ------------------------------------------
-    # 👑 [ADMIN] 관리자 대시보드 (데이터 입력 기능)
+    # 👑 [ADMIN] 관리자 대시보드 (통합 버전)
     # ------------------------------------------
     if user_role == 'admin':
         st.title("👑 관리자 데이터 센터")
-        st.markdown("---")
         
-        # 1. 고객 선택
-        user_list = [u for u in credentials['usernames'] if credentials['usernames'][u]['role'] != 'admin']
-        selected_client = st.selectbox("데이터를 입력할 고객을 선택하세요", user_list, 
-                                       format_func=lambda x: f"{credentials['usernames'][x]['name']} ({x})")
+        # 관리용 탭 구성 (입력 / 유저관리 / 전체기록)
+        tab1, tab2, tab3 = st.tabs(["📝 데이터 입력", "👥 고객 등록 및 관리", "📜 전체 리포트 이력"])
         
-        if selected_client:
-            st.subheader(f"📝 {credentials['usernames'][selected_client]['name']} 대표님 데이터 입력")
-            
-            with st.form("data_input_form", clear_on_submit=True):
-                col1, col2 = st.columns(2)
-                with col1:
-                    new_score = st.number_input("신용점수 (500~999)", min_value=500, max_value=999, value=850)
-                with col2:
-                    new_sales = st.number_input("월 매출액 (단위: 만원)", min_value=0, value=1500)
+        # [Tab 1: 데이터 입력]
+        with tab1:
+            st.subheader("리포트 수치 입력")
+            user_list = [u for u in credentials['usernames'] if credentials['usernames'][u]['role'] != 'admin']
+            if not user_list:
+                st.info("먼저 고객을 등록해 주세요.")
+            else:
+                selected_client = st.selectbox("고객을 선택하세요", user_list, 
+                                               format_func=lambda x: f"{credentials['usernames'][x]['name']} ({x})")
                 
-                new_strategy = st.text_area("공민준 센터장의 경영 제언", placeholder="이 고객에게 전달할 핵심 전략을 입력하세요.")
-                
-                submit_btn = st.form_submit_button("데이터 저장 및 리포트 발행")
-                
-                if submit_btn:
-                    data = {
-                        "client_id": selected_client,
-                        "credit_score": new_score,
-                        "monthly_sales": new_sales,
-                        "strategy_comment": new_strategy
-                    }
-                    try:
+                with st.form("data_input_form", clear_on_submit=True):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        new_score = st.number_input("신용점수 (500~999)", min_value=500, max_value=999, value=850)
+                    with col2:
+                        new_sales = st.number_input("월 매출액 (단위: 만원)", min_value=0, value=1500)
+                    new_strategy = st.text_area("공민준 센터장의 경영 제언")
+                    
+                    if st.form_submit_button("데이터 저장"):
+                        data = {"client_id": selected_client, "credit_score": new_score, 
+                                "monthly_sales": new_sales, "strategy_comment": new_strategy}
                         supabase.table('client_data').insert(data).execute()
-                        st.success(f"{credentials['usernames'][selected_client]['name']} 대표님의 데이터가 성공적으로 저장되었습니다!")
-                    except Exception as e:
-                        st.error(f"저장 중 오류 발생: {e}")
+                        st.success("데이터가 성공적으로 저장되었습니다!")
+                        st.rerun()
+
+        # [Tab 2: 고객 등록 및 관리]
+        with tab2:
+            st.subheader("신규 고객 계정 생성")
+            with st.form("user_reg_form"):
+                new_id = st.text_input("고객 ID (영문/숫자)")
+                new_name = st.text_input("고객 성함")
+                new_pw = st.text_input("비밀번호", type="password")
+                if st.form_submit_button("고객 등록"):
+                    hashed_pw = stauth.Hasher([new_pw]).generate()[0]
+                    new_user = {"username": new_id, "name": new_name, "password": hashed_pw, "role": "viewer"}
+                    supabase.table('users').insert(new_user).execute()
+                    st.success(f"{new_name} 고객님이 등록되었습니다. 새로고침 후 이용하세요.")
+                    st.rerun()
+            
+            st.divider()
+            st.subheader("현재 등록된 고객 리스트")
+            user_df = pd.DataFrame([{"ID": k, "이름": v['name']} for k, v in credentials['usernames'].items() if v['role'] != 'admin'])
+            st.table(user_df)
+
+        # [Tab 3: 전체 리포트 이력]
+        with tab3:
+            st.subheader("전체 발행 리포트 기록")
+            all_res = supabase.table('client_data').select('*').order('created_at', desc=True).execute()
+            if all_res.data:
+                all_df = pd.DataFrame(all_res.data)
+                # ID 대신 이름을 보여주기 위해 매핑
+                all_df['고객명'] = all_df['client_id'].apply(lambda x: credentials['usernames'].get(x, {}).get('name', x))
+                st.dataframe(all_df[['created_at', '고객명', 'credit_score', 'monthly_sales', 'strategy_comment']], use_container_width=True)
+            else:
+                st.write("아직 발행된 리포트가 없습니다.")
 
     # ------------------------------------------
-    # 📈 [VIEWER] 고객 리포트 화면
+    # 📈 [VIEWER] 고객 리포트 화면 (이전 무결성 코드 유지)
     # ------------------------------------------
     else:
         try:
             res = supabase.table('client_data').select('*').eq('client_id', username).order('created_at').execute()
             if res.data:
                 df = pd.DataFrame(res.data)
-                df['created_at'] = pd.to_datetime(df.get('created_at', pd.Timestamp.now())).dt.tz_localize(None)
+                df['created_at'] = pd.to_datetime(df['created_at']).dt.tz_localize(None)
                 df['날짜'] = df['created_at'].dt.strftime('%Y-%m-%d')
                 df['점수'] = pd.to_numeric(df['credit_score']).astype(int)
                 df['매출'] = pd.to_numeric(df['monthly_sales']).astype(int)
@@ -140,15 +168,14 @@ if st.session_state.get("authentication_status"):
 
                 latest = df.iloc[-1]
                 
-                # 프리미엄 헤더
                 st.markdown(f"""
                     <div style="background: linear-gradient(135deg, {NAVY} 0%, #003366 100%); 
                                 padding: 30px; border-radius: 15px; border-left: 10px solid {GOLD}; 
                                 color: white; text-align: center; margin-bottom: 25px;">
-                        <h1 style="color: {GOLD}; margin-bottom: 10px;">📈 {credentials['usernames'][username]['name']} 대표님 맞춤형 경영 리포트</h1>
-                        <p style="font-size: 18px; margin: 0;">현재 경영 상태: 
+                        <h1 style="color: {GOLD}; margin-bottom: 10px;">📈 {credentials['usernames'][username]['name']} 대표님 경영 리포트</h1>
+                        <p style="font-size: 18px; margin: 0;">현재 상태: 
                             <span style="font-weight: 700; color: {'#58D68D' if int(latest['점수']) > 839 else '#F1948A'};">
-                                {"정책자금 승인 권장권" if int(latest['점수']) > 839 else "신용 및 매출 관리 집중 기간"}
+                                {"정책자금 승인 권장권" if int(latest['점수']) > 839 else "신용 관리 집중 기간"}
                             </span>
                         </p>
                     </div>
@@ -169,7 +196,7 @@ if st.session_state.get("authentication_status"):
                     base = alt.Chart(df).encode(x=x_ax, y=alt.Y('점수:Q', scale=alt.Scale(domain=[500, 999], zero=False)))
                     rule = alt.Chart(pd.DataFrame({'y': [839]})).mark_rule(strokeDash=[5,5], color='gray').encode(y='y:Q')
                     chart1 = alt.layer(rule, base.mark_line(color='#ff4b4b', size=3), base.mark_circle(size=150, color='#ff4b4b'),
-                                       base.mark_text(dy=-20, fontSize=15, fontWeight='bold').encode(text='점수_텍스트:N')).properties(height=350)
+                                       base.mark_text(dy=-20, fontSize=15, fontWeight='bold').encode(text='점_텍스트:N')).properties(height=350)
                     st.altair_chart(chart1, use_container_width=True, theme=None)
 
                 with col2:
@@ -184,11 +211,11 @@ if st.session_state.get("authentication_status"):
                 st.subheader("💡 공민준 센터장의 경영 전략 제언")
                 st.info(latest['strategy_comment'])
             else:
-                st.warning("발행된 리포트가 없습니다. 관리자에게 문의하세요.")
+                st.warning("발행된 리포트가 없습니다.")
         except Exception as e:
-             st.error(f"리포트 로딩 오류: {e}")
+             st.error(f"데이터 로딩 오류: {e}")
 
 elif st.session_state.get("authentication_status") is False:
-    st.error('인증 정보가 올바르지 않습니다.')
+    st.error('인증 정보 오류')
 elif st.session_state.get("authentication_status") is None:
-    st.info('로그인 후 이용 가능합니다.')
+    st.info('로그인해 주세요.')
