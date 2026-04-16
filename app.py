@@ -25,6 +25,8 @@ st.markdown("""
         display: none !important;
         visibility: hidden !important;
     }
+    /* 마우스 올렸을 때 나타나는 툴바도 원천 차단 */
+    .vega-actions { display: none !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -130,6 +132,7 @@ if st.session_state["authentication_status"] == True:
                 m3.metric("최신 월 매출액", f"{safe_sales:,} 만원")
 
                 col1, col2 = st.columns(2)
+                # 날짜를 Nominal(:N)으로 설정하여 깜빡임과 증발 방지
                 x_axis = alt.X('날짜:N', title='데이터 입력 날짜', axis=alt.Axis(labelAngle=0))
 
                 with col1:
@@ -139,12 +142,13 @@ if st.session_state["authentication_status"] == True:
                     line = base.mark_line(color='#ff4b4b', size=3)
                     point = base.mark_circle(color='#ff4b4b', size=150)
                     text = base.mark_text(dy=-25, fontSize=15, fontWeight='bold', color='black', clip=False).encode(text='점수:Q')
-                    # 에러를 일으키던 configure_view 삭제하고 순수 레이어만 사용
+                    
                     st.altair_chart(alt.layer(rule, line, point, text).properties(height=350), use_container_width=True)
+                    st.caption("※ 회색 점선: 정책자금 권장 기준선 (839점)")
 
                 with col2:
                     st.subheader("💰 월 매출 성장 추이")
-                    # Y축 축 숫자 검정색으로 강제 고정
+                    # Y축 숫자 검정색으로 강제 고정 및 콤마 포맷
                     base_s = alt.Chart(df).encode(
                         x=x_axis, 
                         y=alt.Y('매출:Q', scale=alt.Scale(domain=[0, 50000]), title='매출(만원)', 
@@ -153,6 +157,7 @@ if st.session_state["authentication_status"] == True:
                     line_s = base_s.mark_line(color='#0068c9', size=3)
                     point_s = base_s.mark_circle(color='#0068c9', size=150)
                     text_s = base_s.mark_text(dy=-25, fontSize=15, fontWeight='bold', color='black', clip=False).encode(text=alt.Text('매출:Q', format=","))
+                    
                     st.altair_chart(alt.layer(line_s, point_s, text_s).properties(height=350), use_container_width=True)
 
                 st.divider()
