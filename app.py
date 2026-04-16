@@ -10,7 +10,7 @@ import altair as alt
 # ==========================================
 st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide")
 
-# [핵심] 차트 우측 상단 메뉴, 전체화면 버튼 영구 삭제
+# [핵심] 차트 메뉴(데이터 표시, 전체화면)를 완전히 숨기는 CSS
 st.markdown("""
     <style>
     [data-testid="stElementActions"] {display: none !important;}
@@ -78,8 +78,15 @@ elif st.session_state["authentication_status"] == True:
     name = st.session_state["name"]
     user_role = credentials['usernames'][username]['role']
     
+    # [해결 1] 쿠키에 저장된 옛날 이름 무시하고, 무조건 실시간 DB에서 최신 이름 가져오기
+    try:
+        user_db = supabase.table('users').select('name').eq('username', username).execute()
+        display_name = user_db.data[0]['name'] if user_db.data else name
+    except:
+        display_name = name
+
     with st.sidebar:
-        st.write(f"**{name}**님 반갑습니다.")
+        st.write(f"**{display_name}**님 반갑습니다.")
         st.divider()
         try:
             if authenticator.reset_password(username, 'sidebar'):
@@ -139,10 +146,10 @@ elif st.session_state["authentication_status"] == True:
                         st.error(f"저장 실패: {e}")
 
     # ==========================================
-    # 4-B. [고객 모드] 업체 대표님 전용 (최종 수정본)
+    # 4-B. [고객 모드] 업체 대표님 전용 (최종 UI 보강)
     # ==========================================
     else:
-        st.title(f"📈 {name} 대표님 맞춤형 경영 리포트")
+        st.title(f"📈 {display_name} 대표님 맞춤형 경영 리포트")
         
         try:
             res = supabase.table('client_data').select('*').eq('client_id', username).execute()
@@ -156,13 +163,10 @@ elif st.session_state["authentication_status"] == True:
                 df['created_at'] = pd.to_datetime(df['created_at']).dt.tz_localize(None)
                 df = df.sort_values('created_at')
 
-                if len(df) == 1:
-                    dummy = df.iloc[[0]].copy()
-                    dummy['created_at'] = dummy['created_at'] - pd.Timedelta(minutes=1)
-                    df = pd.concat([dummy, df], ignore_index=True)
-
-                # [해결 3] 날짜 뒤에 시:분:초 까지 붙여서 테스트 데이터가 안 뭉치게 강제 분리!
-                df['date_label'] = df['created_at'].dt.strftime('%m-%d %H:%M:%S')
+                # [해결 2] 가짜 데이터를 만드는 코드를 완전히 삭제했습니다. (데이터 1개면 1개만 출력)
+                
+                # 날짜를 YYYY-MM-DD 형태로 변환
+                df['date_label'] = df['created_at'].dt.strftime('%Y-%m-%d')
                 
                 df['score_num'] = pd.to_numeric(df['credit_score'], errors='coerce').fillna(0).astype(int)
                 df['sales_num'] = pd.to_numeric(df['monthly_sales'], errors='coerce').fillna(0).astype(int)
@@ -177,26 +181,27 @@ elif st.session_state["authentication_status"] == True:
                 bg_color = "#87CEEB" if safe_score > 839 else "#FFCCCC"
                 status_text = "정책자금 기준(839) 충족" if safe_score > 839 else "정책자금 기준(839) 미달"
 
+                # [해결 3] 상단 박스 높이 축소 (padding:10px) 및 글자 순서 뒤집기
                 st.markdown(f"""
-                    <div style="background-color:{bg_color}; padding:20px; border-radius:10px; border: 2px solid #333; text-align:center;">
-                        <h2 style="color:black; margin:0;">현재 상태: {status_text}</h2>
-                        <p style="color:black; font-size:18px; margin:10px 0 0 0;">
-                            <b>{name}</b> 대표님의 최신 신용점수는 <b>{safe_score}점</b> 입니다.
+                    <div style="background-color:{bg_color}; padding:10px; border-radius:10px; border: 2px solid #333; text-align:center;">
+                        <p style="color:black; font-size:16px; margin:0 0 5px 0;">
+                            <b>{display_name}</b> 대표님의 최신 신용점수는 <b>{safe_score}점</b> 입니다.
                         </p>
+                        <h3 style="color:black; margin:0;">현재 상태: {status_text}</h3>
                     </div>
                 """, unsafe_allow_html=True)
                 
                 st.divider()
 
                 m1, m2, m3 = st.columns(3)
-                m1.metric("성함", name)
+                m1.metric("성함", display_name)
                 m2.metric("최신 신용점수", f"{safe_score} 점")
                 m3.metric("최신 월 매출액", f"{safe_sales:,} 만원")
 
                 col1, col2 = st.columns(2)
                 
-                # 라벨을 대각선(-45도)으로 눕혀서 시간이 길어져도 안 겹치게 만듦
-                x_axis = alt.X('date_label:N', title='데이터 입력 시간', axis=alt.Axis(labelAngle=-45))
+                # 명목형(:N)으로 날짜를 지정하면 1개라도 무조건 가운데에 잘 찍힙니다.
+                x_axis = alt.X('date_label:N', title='데이터 입력 날짜', axis=alt.Axis(labelAngle=0))
 
                 with col1:
                     st.subheader("🛡️ 신용점수 분석 추이")
@@ -205,6 +210,8 @@ elif st.session_state["authentication_status"] == True:
                         y=alt.Y('score_num:Q', scale=alt.Scale(domain=[0, 999]), title='신용점수 (0~999점)', axis=alt.Axis(values=[0, 200, 400, 600, 800, 999]))
                     )
                     rule_score = alt.Chart(pd.DataFrame({'y': [839]})).mark_rule(strokeDash=[5, 5], color='gray').encode(y='y:Q')
+                    
+                    # 데이터가 1개면 선은 안 그려지고 점만 예쁘게 찍힙니다.
                     line_score = base_score.mark_line(color='#ff4b4b', size=3)
                     point_score = base_score.mark_circle(color='#ff4b4b', size=150)
                     text_score = base_score.mark_text(dy=-25, fontSize=15, fontWeight='bold', color='black').encode(text='score_str:N')
@@ -216,9 +223,7 @@ elif st.session_state["authentication_status"] == True:
                     st.subheader("💰 월 매출 성장 추이")
                     base_sales = alt.Chart(df).encode(
                         x=x_axis,
-                        # [해결 2] 0~5만 배열을 못 박아버리고, labelExpr로 콤마를 강제로 찍어버림!
-                        y=alt.Y('sales_num:Q', scale=alt.Scale(domain=[0, 50000]), title='월 매출액 (만원)', 
-                                axis=alt.Axis(values=[0, 10000, 20000, 30000, 40000, 50000], labelExpr="format(datum.value, ',')"))
+                        y=alt.Y('sales_num:Q', scale=alt.Scale(domain=[0, 50000]), title='월 매출액 (만원)', axis=alt.Axis(values=[0, 10000, 20000, 30000, 40000, 50000], format=",.0f"))
                     )
                     line_sales = base_sales.mark_line(color='#0068c9', size=3)
                     point_sales = base_sales.mark_circle(color='#0068c9', size=150)
