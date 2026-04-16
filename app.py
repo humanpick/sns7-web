@@ -10,18 +10,18 @@ import altair as alt
 # ==========================================
 st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide")
 
-# [마스터 CSS] 상단 공백 제거 및 그래프 부가 기능 아이콘 완전 삭제
+# [마스터 CSS] 상단 공백 제거 및 아이콘 강제 삭제
 st.markdown("""
     <style>
-    /* 상단 여백 제거 */
     .block-container {
         padding-top: 0rem !important;
         padding-bottom: 0rem !important;
         margin-top: -50px !important;
     }
     header {visibility: hidden; height: 0px;}
+    footer {visibility: hidden;}
     
-    /* 그래프 우측 상단 '데이터 표시', '전체화면' 아이콘 완전 박멸 */
+    /* 그래프 부가 기능 버튼 무조건 숨김 */
     [data-testid="stElementActions"], 
     .stElementActions,
     button[title="View fullscreen"],
@@ -87,7 +87,7 @@ if st.session_state["authentication_status"] == True:
 
     if credentials['usernames'][username]['role'] == 'admin':
         st.title("👑 관리자 대시보드")
-        st.info("고객 데이터 관리 모드입니다.")
+        st.info("고객 데이터 관리 화면입니다.")
     else:
         st.title(f"📈 {real_name} 대표님 맞춤형 경영 리포트")
         
@@ -98,11 +98,20 @@ if st.session_state["authentication_status"] == True:
                 if 'created_at' not in df.columns: df['created_at'] = pd.Timestamp.now()
                 df['created_at'] = pd.to_datetime(df['created_at']).dt.tz_localize(None)
                 df = df.sort_values('created_at')
+                # 하단 날짜 노출을 위한 텍스트 처리
                 df['date_label'] = df['created_at'].dt.strftime('%Y-%m-%d')
                 
+                # 수치 변환
+                df['score_val'] = pd.to_numeric(df['credit_score'], errors='coerce').fillna(0).astype(int)
+                df['sales_val'] = pd.to_numeric(df['monthly_sales'], errors='coerce').fillna(0).astype(int)
+                
+                # PC 증발 방지용: 숫자를 미리 선명한 '텍스트(문자)'로 바꿔둠
+                df['score_text'] = df['score_val'].astype(str)
+                df['sales_text'] = df['sales_val'].apply(lambda x: f"{x:,}")
+                
                 latest = df.iloc[-1]
-                safe_score = int(latest['credit_score'])
-                safe_sales = int(latest['monthly_sales'])
+                safe_score = int(latest['score_val'])
+                safe_sales = int(latest['sales_val'])
                 
                 bg_color = "#87CEEB" if safe_score > 839 else "#FFCCCC"
                 status_text = "정책자금 기준(839) 충족" if safe_score > 839 else "정책자금 기준(839) 미달"
@@ -124,33 +133,41 @@ if st.session_state["authentication_status"] == True:
                 m3.metric("최신 월 매출액", f"{safe_sales:,} 만원")
 
                 col1, col2 = st.columns(2)
-                x_ax = alt.X('date_label:N', title='데이터 입력 날짜', axis=alt.Axis(labelAngle=0))
+                
+                # X축 (하단 날짜 표기 강제 노출)
+                x_ax = alt.X('date_label:N', title='데이터 입력일', axis=alt.Axis(labelAngle=0, labelColor='black', labelOverlap=False))
 
                 with col1:
                     st.subheader("🛡️ 신용점수 분석 추이")
-                    base = alt.Chart(df).encode(x=x_ax, y=alt.Y('credit_score:Q', scale=alt.Scale(domain=[0, 999]), title='점수', axis=alt.Axis(labelColor='black')))
+                    # Y축 도메인 500 ~ 999 설정
+                    base = alt.Chart(df).encode(
+                        x=x_ax, 
+                        y=alt.Y('score_val:Q', scale=alt.Scale(domain=[500, 999]), title='점수', axis=alt.Axis(labelColor='black'))
+                    )
                     rule = alt.Chart(pd.DataFrame({'y': [839]})).mark_rule(strokeDash=[5,5], color='gray').encode(y='y:Q')
                     line = base.mark_line(color='#ff4b4b', size=3)
                     point = base.mark_circle(color='#ff4b4b', size=150)
-                    
-                    # [수정] 가장 안정적인 텍스트 표시 방법
-                    text = base.mark_text(dy=-25, fontSize=16, fontWeight='bold', color='black', clip=False).encode(text='credit_score:Q')
+                    # 수치 증발 방지를 위해 미리 만든 문자열(score_text) 사용
+                    text = base.mark_text(dy=-25, fontSize=16, fontWeight='bold', color='black', clip=False).encode(text='score_text:N')
                     
                     st.altair_chart(alt.layer(rule, line, point, text).properties(height=350), use_container_width=True)
+                    st.caption("※ 회색 점선: 정책자금 권장 기준선 (839점)")
 
                 with col2:
                     st.subheader("💰 월 매출 성장 추이")
-                    # [수정] PC 가독성을 위해 축 설정을 가장 단순하고 강력하게 고정
+                    # Y축 500,000(5억)까지 강제 표기
                     base_s = alt.Chart(df).encode(
                         x=x_ax, 
-                        y=alt.Y('monthly_sales:Q', scale=alt.Scale(domain=[0, 50000]), title='매출(만원)', 
-                                axis=alt.Axis(values=[0,10000,20000,30000,40000,50000], format=",.0f", labelColor='black'))
+                        y=alt.Y('sales_val:Q', scale=alt.Scale(domain=[0, 50000]), title='매출(만원)', 
+                                axis=alt.Axis(values=[0,10000,20000,30000,40000,50000], labelExpr="format(datum.value, ',')", labelColor='black'))
                     )
                     line_s = base_s.mark_line(color='#0068c9', size=3)
                     point_s = base_s.mark_circle(color='#0068c9', size=150)
-                    text_s = base_s.mark_text(dy=-25, fontSize=16, fontWeight='bold', color='black', clip=False).encode(text=alt.Text('monthly_sales:Q', format=","))
+                    # 1,300 수치 증발 방지를 위해 미리 만든 문자열(sales_text) 사용
+                    text_s = base_s.mark_text(dy=-25, fontSize=16, fontWeight='bold', color='black', clip=False).encode(text='sales_text:N')
                     
                     st.altair_chart(alt.layer(line_s, point_s, text_s).properties(height=350), use_container_width=True)
+                    st.caption("※ 차트 범위: 0원 ~ 5억 원 (50,000만 원)")
 
                 st.divider()
                 st.subheader("💡 공민준 센터장의 핵심 경영 제언")
@@ -158,7 +175,6 @@ if st.session_state["authentication_status"] == True:
                 
             else: st.warning("아직 발행된 리포트가 없습니다.")
         except Exception as e:
-             # 💡 이제 에러가 나면 "데이터 로딩 중"이라는 말 대신 진짜 에러 내용을 보여줍니다.
              st.error(f"그래프 생성 중 오류 발생: {e}")
 
 elif st.session_state["authentication_status"] == False:
