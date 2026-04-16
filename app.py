@@ -9,8 +9,8 @@ import pandas as pd
 st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide")
 
 # [필수] 센터장님의 Supabase API 정보로 교체하세요!
-SUPABASE_URL = "여기에_Supabase_URL을_붙여넣으세요"
-SUPABASE_KEY = "여기에_Supabase_Anon_Key를_붙여넣으세요"
+SUPABASE_URL = "https://pjpnaqyyzlkolnfvlpps.supabase.co"
+SUPABASE_KEY = "sb_publishable_T-AtFoqpZrgr86NkknpWBw_8i38viJV"
 
 @st.cache_resource
 def init_connection():
