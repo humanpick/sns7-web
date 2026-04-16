@@ -125,16 +125,18 @@ if st.session_state.get("authentication_status") == True:
                 with col2:
                     st.subheader("💰 월 매출 성장 추이")
                     
-                    # 💡 [진짜 해결] 엔진의 계산을 완전히 무시하고, 지정한 한글(1억, 5억 등)을 축에 강제로 박아넣는 코드입니다.
-                    label_expression = "datum.value == 50000 ? '5억' : datum.value == 30000 ? '3억' : datum.value == 20000 ? '2억' : datum.value == 10000 ? '1억' : datum.value == 5000 ? '5000만' : datum.value == 3000 ? '3000만' : datum.value == 2000 ? '2000만' : datum.value == 1000 ? '1000만' : '0원'"
+                    # 💡 [진짜 해결] 에러를 유발하던 긴 문장을 빼고, 아주 짧고 스마트한 수학 공식을 넣었습니다.
+                    # 10000 이상이면 '억'을 붙이고, 아니면 '만원'을 붙입니다.
+                    smart_label_expr = "datum.value == 0 ? '0원' : (datum.value >= 10000 ? (datum.value / 10000) + '억' : datum.value + '만원')"
                     
                     base_s = alt.Chart(df).encode(
                         x=x_ax, 
                         y=alt.Y('매출:Q', scale=alt.Scale(domain=[0, 50000], nice=False, clamp=True), title='매출', 
                                 axis=alt.Axis(
                                     values=[0, 1000, 2000, 3000, 5000, 10000, 20000, 30000, 50000], 
-                                    labelExpr=label_expression, 
-                                    labelColor='black'
+                                    labelExpr=smart_label_expr, 
+                                    labelColor='black',
+                                    labelOverlap=False
                                 ))
                     )
                     
