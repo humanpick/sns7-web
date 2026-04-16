@@ -13,7 +13,7 @@ st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide"
 NAVY = "#001F3F"
 GOLD = "#D4AF37"
 
-# 스타일 시트 (상단 에러 메시지 노출 방지 처리 완료)
+# 스타일 시트 (상단 에러 방지 및 디자인 통합)
 style_code = f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;500;700&display=swap');
@@ -40,7 +40,7 @@ style_code = f"""
         padding: 0.5rem 1rem !important;
     }}
 
-    /* 레이아웃 최적화 */
+    /* 레이아웃 및 헤더 최적화 */
     .block-container {{ 
         padding-top: 1rem !important; 
         margin-top: -30px !important; 
@@ -62,11 +62,10 @@ style_code = f"""
 st.markdown(style_code, unsafe_allow_html=True)
 
 # ------------------------------------------
-# [필수] Supabase 연결 정보 (Key를 꼭 확인하세요!)
+# [필수] Supabase 연결 정보
 # ------------------------------------------
 SUPABASE_URL = "https://pjpnaqyyzlkolnfvlpps.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBqcG5hcXl5emxrb2xuZnZscHBzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxOTEwNzgsImV4cCI6MjA5MTc2NzA3OH0.Y1kR473B-XdxnZZG3akAsp6kvGxTIL1S8IG7is8mgMM"
-
+SUPABASE_KEY = "발급받으신_공용_API_키를_여기에_넣으세요"
 
 @st.cache_resource(show_spinner=False)
 def init_connection():
@@ -99,7 +98,7 @@ credentials = fetch_users()
 # 세션 유지를 위한 인증 설정
 authenticator = stauth.Authenticate(credentials, 'ceo_portal_cookie', 'signature_key', cookie_expiry_days=30)
 
-# 로그인 화면 출력
+# 로그인 화면
 authenticator.login('main')
 
 if st.session_state.get("authentication_status"):
@@ -128,7 +127,7 @@ if st.session_state.get("authentication_status"):
             if not user_list:
                 st.info("먼저 [고객 등록 및 관리] 탭에서 고객을 등록해 주세요.")
             else:
-                selected_client = st.selectbox("데이터를 입력할 고객을 선택하세요", user_list, 
+                selected_client = st.selectbox("고객을 선택하세요", user_list, 
                                                format_func=lambda x: f"{credentials['usernames'][x]['name']} ({x})")
                 
                 with st.form("data_input_form", clear_on_submit=True):
@@ -137,13 +136,13 @@ if st.session_state.get("authentication_status"):
                         new_score = st.number_input("신용점수 (500~999)", min_value=500, max_value=999, value=850)
                     with col2:
                         new_sales = st.number_input("월 매출액 (단위: 만원)", min_value=0, value=1500)
-                    new_strategy = st.text_area("공민준 센터장의 경영 제언", placeholder="핵심 전략을 입력하세요.")
+                    new_strategy = st.text_area("공민준 센터장의 경영 제언")
                     
                     if st.form_submit_button("데이터 저장 및 리포트 발행"):
                         data = {"client_id": selected_client, "credit_score": new_score, 
                                 "monthly_sales": new_sales, "strategy_comment": new_strategy}
                         supabase.table('client_data').insert(data).execute()
-                        st.success(f"{credentials['usernames'][selected_client]['name']} 대표님의 데이터가 저장되었습니다!")
+                        st.success(f"데이터가 저장되었습니다!")
                         st.rerun()
 
         # [Tab 2: 고객 등록 및 관리]
@@ -158,13 +157,13 @@ if st.session_state.get("authentication_status"):
                 
                 if st.form_submit_button("고객 등록 및 ID 생성"):
                     if not reg_name or not reg_pw or len(reg_phone) < 4:
-                        st.warning("정보를 모두 입력해 주세요. (휴대폰 번호 4자리 이상 필수)")
+                        st.warning("정보를 모두 입력해 주세요.")
                     else:
+                        # 💡 ID 자동 생성: kdj + 마지막 4자리
                         generated_id = f"kdj{reg_phone[-4:]}"
                         try:
-                            # 💡 [해결] 최신 라이브러리 버전에 맞는 가장 안전한 암호화 호출 방식입니다.
-                            # Hasher.hash_passwords는 리스트를 반환하므로 [0]으로 첫 번째 값을 가져옵니다.
-                            hashed_pw = stauth.Hasher.hash_passwords([str(reg_pw)])[0]
+                            # 💡 최신 라이브러리 버전에 맞춘 가장 안전한 암호화 호출 방식
+                            hashed_pw = stauth.Hasher([str(reg_pw)]).generate()[0]
                             
                             new_user = {
                                 "username": generated_id, 
@@ -175,17 +174,18 @@ if st.session_state.get("authentication_status"):
                             
                             supabase.table('users').insert(new_user).execute()
                             st.success(f"✅ {reg_name} 대표님 등록 완료! (아이디: {generated_id})")
-                            st.rerun()
+                            st.rerun()  # 즉시 새로고침하여 리스트에 반영
                         except Exception as e:
                             st.error(f"등록 실패: {e}")
             
             st.divider()
             st.subheader("현재 등록된 고객 리스트")
+            # 관리자를 제외한 실제 고객 리스트만 추출
             client_list = [{"ID": k, "이름": v['name']} for k, v in credentials['usernames'].items() if v['role'] != 'admin']
             if client_list:
                 st.table(pd.DataFrame(client_list))
             else:
-                st.write("등록된 고객이 없습니다.")
+                st.info("등록된 고객이 없습니다. 위 양식을 통해 첫 고객을 등록해 보세요!")
 
         # [Tab 3: 전체 리포트 이력]
         with tab3:
@@ -196,7 +196,7 @@ if st.session_state.get("authentication_status"):
                 all_df['고객명'] = all_df['client_id'].apply(lambda x: credentials['usernames'].get(x, {}).get('name', x))
                 st.dataframe(all_df[['created_at', '고객명', 'credit_score', 'monthly_sales', 'strategy_comment']], use_container_width=True)
             else:
-                st.write("아직 발행된 리포트가 없습니다.")
+                st.write("발행된 리포트 기록이 없습니다.")
 
     # ------------------------------------------
     # 📈 [VIEWER] 고객 리포트 화면
@@ -218,7 +218,6 @@ if st.session_state.get("authentication_status"):
 
                 latest = df.iloc[-1]
                 
-                # 프리미엄 헤더 배너
                 st.markdown(f"""
                     <div style="background: linear-gradient(135deg, {NAVY} 0%, #003366 100%); 
                                 padding: 30px; border-radius: 15px; border-left: 10px solid {GOLD}; 
