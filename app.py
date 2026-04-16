@@ -10,7 +10,6 @@ import altair as alt
 # ==========================================
 st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide")
 
-# [마스터 CSS] 상단 여백 제거 및 메뉴 아이콘 영구 삭제
 st.markdown("""
     <meta name="google" content="notranslate">
     <style>
@@ -36,7 +35,7 @@ except Exception as e:
     st.stop()
 
 # ==========================================
-# 2. 데이터베이스 통신 함수
+# 2. 데이터 통신 및 로그인
 # ==========================================
 def fetch_users():
     try:
@@ -50,19 +49,13 @@ def fetch_users():
         return credentials
     except: return {'usernames': {}}
 
-# ==========================================
-# 3. 로그인 및 실명 동기화
-# ==========================================
 credentials = fetch_users()
-
-# 💡 [핵심 해결] 쿠키 유지 기한을 0일에서 30일로 복구하여 로그인 창 중복 현상 해결!
 authenticator = stauth.Authenticate(credentials, 'ceo_portal_cookie', 'signature_key', cookie_expiry_days=30)
 authenticator.login('main')
 
 if st.session_state.get("authentication_status") == True:
     username = st.session_state["username"]
     
-    # DB 실시간 이름 동기화
     try:
         user_res = supabase.table('users').select('name').eq('username', username).execute()
         real_name = user_res.data[0]['name'] if user_res.data else credentials['usernames'][username]['name']
@@ -86,7 +79,6 @@ if st.session_state.get("authentication_status") == True:
                 df['created_at'] = pd.to_datetime(df.get('created_at', pd.Timestamp.now())).dt.tz_localize(None)
                 df['날짜'] = df['created_at'].dt.strftime('%Y-%m-%d')
                 
-                # 수치 강제 변환
                 df['점수'] = pd.to_numeric(df['credit_score'], errors='coerce').fillna(0).astype(int)
                 df['매출'] = pd.to_numeric(df['monthly_sales'], errors='coerce').fillna(0).astype(int)
 
@@ -115,7 +107,6 @@ if st.session_state.get("authentication_status") == True:
 
                 with col1:
                     st.subheader("🛡️ 신용점수 분석 추이")
-                    # 500~1000 고정
                     base = alt.Chart(df).encode(
                         x=x_ax, 
                         y=alt.Y('점수:Q', scale=alt.Scale(domain=[500, 1000], nice=False, clamp=True), title='점수', axis=alt.Axis(labelColor='black'))
@@ -134,11 +125,11 @@ if st.session_state.get("authentication_status") == True:
 
                 with col2:
                     st.subheader("💰 월 매출 성장 추이")
-                    # 0~50000 고정 및 콤마
+                    # 💡 [진짜 해결] 1e+4 방지를 위해 format=",.0f" 로 변경하여 강제 콤마 표기
                     base_s = alt.Chart(df).encode(
                         x=x_ax, 
                         y=alt.Y('매출:Q', scale=alt.Scale(domain=[0, 50000], nice=False, clamp=True), title='매출(만원)', 
-                                axis=alt.Axis(values=[0,10000,20000,30000,40000,50000], format=",", labelColor='black'))
+                                axis=alt.Axis(values=[0,10000,20000,30000,40000,50000], format=",.0f", labelColor='black'))
                     )
                     
                     chart2 = alt.layer(
