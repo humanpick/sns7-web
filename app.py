@@ -10,20 +10,36 @@ import altair as alt
 # ==========================================
 st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide")
 
+# [마스터 CSS] 상단 공백 제거 및 그래프 부가 기능 아이콘 완전 삭제
 st.markdown("""
-    <meta name="google" content="notranslate">
     <style>
-    .block-container { padding-top: 0rem !important; margin-top: -50px !important; }
-    header { visibility: hidden; height: 0px; }
-    [data-testid="stElementActions"], .vega-actions { display: none !important; }
+    .block-container {
+        padding-top: 0rem !important;
+        padding-bottom: 0rem !important;
+        margin-top: -55px !important;
+    }
+    header {visibility: hidden; height: 0px;}
+    footer {visibility: hidden;}
+    
+    /* 그래프 우측 상단 '데이터 표시', '전체화면' 버튼 완전 박멸 */
+    [data-testid="stElementActions"], 
+    .stElementActions,
+    button[title="View fullscreen"],
+    .vega-actions,
+    summary,
+    details {
+        display: none !important;
+        visibility: hidden !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
+# [필수] 민준 님의 Supabase 정보를 입력하세요.
 SUPABASE_URL = "https://pjpnaqyyzlkolnfvlpps.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBqcG5hcXl5emxrb2xuZnZscHBzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxOTEwNzgsImV4cCI6MjA5MTc2NzA3OH0.Y1kR473B-XdxnZZG3akAsp6kvGxTIL1S8IG7is8mgMM"
 
 
-@st.cache_resource(show_spinner=False)
+@st.cache_resource
 def init_connection():
     return create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -34,7 +50,7 @@ except Exception as e:
     st.stop()
 
 # ==========================================
-# 2. 데이터 통신 및 로그인
+# 2. 데이터베이스 통신 함수
 # ==========================================
 def fetch_users():
     try:
@@ -43,16 +59,21 @@ def fetch_users():
         for user in response.data:
             credentials['usernames'][user['username']] = {
                 'email': f"{user['username']}@ceo.com", 
-                'name': user['name'], 'password': user['password'], 'role': user['role']
+                'name': user['name'],
+                'password': user['password'],
+                'role': user['role']
             }
         return credentials
     except: return {'usernames': {}}
 
+# ==========================================
+# 3. 로그인 및 실명 동기화 시스템
+# ==========================================
 credentials = fetch_users()
 authenticator = stauth.Authenticate(credentials, 'ceo_portal_cookie', 'signature_key', cookie_expiry_days=30)
 authenticator.login('main')
 
-if st.session_state.get("authentication_status") == True:
+if st.session_state["authentication_status"] == True:
     username = st.session_state["username"]
     
     try:
@@ -66,32 +87,29 @@ if st.session_state.get("authentication_status") == True:
 
     if credentials['usernames'][username]['role'] == 'admin':
         st.title("👑 관리자 대시보드")
-        st.info("고객 데이터 관리 화면입니다.")
+    
     else:
         st.title(f"📈 {real_name} 대표님 맞춤형 경영 리포트")
         
         try:
-            res = supabase.table('client_data').select('*').eq('client_id', username).order('created_at').execute()
-            
+            res = supabase.table('client_data').select('*').eq('client_id', username).execute()
             if res.data:
                 df = pd.DataFrame(res.data)
-                df['created_at'] = pd.to_datetime(df.get('created_at', pd.Timestamp.now())).dt.tz_localize(None)
-                df['날짜'] = df['created_at'].dt.strftime('%Y-%m-%d')
+                if 'created_at' not in df.columns: df['created_at'] = pd.Timestamp.now()
+                df['created_at'] = pd.to_datetime(df['created_at']).dt.tz_localize(None)
+                df = df.sort_values('created_at')
+                df['date_label'] = df['created_at'].dt.strftime('%Y-%m-%d')
                 
-                df['점수'] = pd.to_numeric(df['credit_score'], errors='coerce').fillna(0).astype(int)
-                df['매출'] = pd.to_numeric(df['monthly_sales'], errors='coerce').fillna(0).astype(int)
-
-                # 💡 [핵심 방어 1] 차트 엔진이 계산하다가 뻗지 않도록, 글자를 미리 여기서 예쁘게 만들어 둡니다!
-                df['점수_텍스트'] = df['점수'].astype(str)
-                df['매출_텍스트'] = df['매출'].apply(lambda x: f"{x:,}")
-
                 latest = df.iloc[-1]
-                safe_score, safe_sales = int(latest['점수']), int(latest['매출'])
+                safe_score = int(latest['credit_score'])
+                safe_sales = int(latest['monthly_sales'])
                 
                 bg_color = "#87CEEB" if safe_score > 839 else "#FFCCCC"
+                status_text = "정책자금 기준(839) 충족" if safe_score > 839 else "정책자금 기준(839) 미달"
+
                 st.markdown(f"""
                     <div style="background-color:{bg_color}; padding:10px; border-radius:10px; border:2px solid #333; text-align:center;">
-                        <h3 style="color:black; margin:0 0 5px 0;">현재 상태: {"정책자금 기준(839) 충족" if safe_score > 839 else "정책자금 기준(839) 미달"}</h3>
+                        <h3 style="color:black; margin:0 0 5px 0;">현재 상태: {status_text}</h3>
                         <p style="color:black; font-size:16px; margin:0;">
                             <b>{real_name}</b> 대표님의 최신 신용점수는 <b>{safe_score}점</b> 입니다.
                         </p>
@@ -106,60 +124,46 @@ if st.session_state.get("authentication_status") == True:
                 m3.metric("최신 월 매출액", f"{safe_sales:,} 만원")
 
                 col1, col2 = st.columns(2)
-                x_ax = alt.X('날짜:N', title='데이터 입력일', axis=alt.Axis(labelAngle=0, labelColor='black'))
+                x_ax = alt.X('date_label:N', title='데이터 입력 날짜', axis=alt.Axis(labelAngle=0))
 
                 with col1:
                     st.subheader("🛡️ 신용점수 분석 추이")
+                    # [설정] Y축 범위를 요청하신 500 ~ 999점으로 고정
                     base = alt.Chart(df).encode(
                         x=x_ax, 
-                        y=alt.Y('점수:Q', scale=alt.Scale(domain=[500, 1000], clamp=True), title='점수', axis=alt.Axis(labelColor='black'))
+                        y=alt.Y('credit_score:Q', scale=alt.Scale(domain=[500, 999]), title='점수', axis=alt.Axis(labelColor='black'))
                     )
                     rule = alt.Chart(pd.DataFrame({'y': [839]})).mark_rule(strokeDash=[5,5], color='gray').encode(y='y:Q')
+                    line = base.mark_line(color='#ff4b4b', size=3)
+                    point = base.mark_circle(color='#ff4b4b', size=150)
+                    text = base.mark_text(dy=-25, fontSize=16, fontWeight='bold', color='black', clip=False).encode(text='credit_score:Q')
                     
-                    chart1 = alt.layer(
-                        rule, 
-                        base.mark_line(color='#ff4b4b', size=3), 
-                        base.mark_circle(size=150, color='#ff4b4b'), 
-                        # 💡 엔진 포맷팅 오류를 피해 미리 만든 '점수_텍스트'를 그대로 도장 찍습니다.
-                        base.mark_text(dy=-20, fontSize=15, fontWeight='bold', color='black', clip=False).encode(text='점수_텍스트:N')
-                    ).properties(height=350)
-                    
-                    st.altair_chart(chart1, use_container_width=True, theme=None)
-                    st.caption("※ 회색 점선: 정책자금 권장 기준선 (839점)")
+                    st.altair_chart(alt.layer(rule, line, point, text).properties(height=350), use_container_width=True)
 
                 with col2:
                     st.subheader("💰 월 매출 성장 추이")
-                    
-                    # 가장 안정적인 축 레이블 수식
-                    safe_label_expr = "datum.value == 0 ? '0원' : (datum.value >= 10000 ? (datum.value / 10000) + '억' : datum.value + '만')"
-                    
+                    # [설정] Y축 범위를 최대 20,000(2억)으로 잡고, 1천만 단위로 세분화된 축 값 설정
+                    # 단위가 '만원'이므로 1,000 = 1,000만원 / 10,000 = 1억 / 20,000 = 2억
                     base_s = alt.Chart(df).encode(
                         x=x_ax, 
-                        y=alt.Y('매출:Q', scale=alt.Scale(domain=[0, 50000], clamp=True), title='매출', 
+                        y=alt.Y('monthly_sales:Q', 
+                                scale=alt.Scale(domain=[0, 20000]), 
+                                title='매출(만원)', 
                                 axis=alt.Axis(
-                                    values=[0, 1000, 2000, 3000, 5000, 10000, 20000, 30000, 50000], 
-                                    labelExpr=safe_label_expr, 
+                                    values=[0, 1000, 2000, 3000, 4000, 5000, 10000, 15000, 20000], # 1천만~5천만 세분화 후 1억, 1.5억, 2억
+                                    format=",.0f", 
                                     labelColor='black'
                                 ))
                     )
+                    line_s = base_s.mark_line(color='#0068c9', size=3)
+                    point_s = base_s.mark_circle(color='#0068c9', size=150)
+                    text_s = base_s.mark_text(dy=-25, fontSize=16, fontWeight='bold', color='black', clip=False).encode(text=alt.Text('monthly_sales:Q', format=","))
                     
-                    chart2 = alt.layer(
-                        base_s.mark_line(color='#0068c9', size=3), 
-                        base_s.mark_circle(size=150, color='#0068c9'),
-                        # 💡 엔진 포맷팅 오류를 피해 미리 만든 '매출_텍스트'를 그대로 도장 찍습니다.
-                        base_s.mark_text(dy=-20, fontSize=15, fontWeight='bold', color='black', clip=False).encode(text='매출_텍스트:N')
-                    ).properties(height=350)
-                    
-                    st.altair_chart(chart2, use_container_width=True, theme=None)
+                    st.altair_chart(alt.layer(line_s, point_s, text_s).properties(height=350), use_container_width=True)
 
                 st.divider()
                 st.subheader("💡 공민준 센터장의 핵심 경영 제언")
                 st.info(latest.get('strategy_comment', "제언 수립 중입니다."))
                 
         except Exception as e:
-             st.error(f"시스템 오류: {e}")
-
-elif st.session_state.get("authentication_status") == False:
-    st.error('아이디 또는 비밀번호를 확인해 주세요.')
-elif st.session_state.get("authentication_status") == None:
-    st.info('로그인해 주세요.')
+             st.error(f"데이터를 불러오는 중입니다...")
