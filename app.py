@@ -124,9 +124,6 @@ if st.session_state.get("authentication_status") == True:
 
                 with col2:
                     st.subheader("💰 월 매출 성장 추이")
-                    
-                    # 💡 [진짜 해결] 에러를 유발하던 긴 문장을 빼고, 아주 짧고 스마트한 수학 공식을 넣었습니다.
-                    # 10000 이상이면 '억'을 붙이고, 아니면 '만원'을 붙입니다.
                     smart_label_expr = "datum.value == 0 ? '0원' : (datum.value >= 10000 ? (datum.value / 10000) + '억' : datum.value + '만원')"
                     
                     base_s = alt.Chart(df).encode(
@@ -136,7 +133,8 @@ if st.session_state.get("authentication_status") == True:
                                     values=[0, 1000, 2000, 3000, 5000, 10000, 20000, 30000, 50000], 
                                     labelExpr=smart_label_expr, 
                                     labelColor='black',
-                                    labelOverlap=False
+                                    labelOverlap=True, # 💡 [강제 방어 1] 겹쳐도 무조건 렌더링!
+                                    labelLimit=500     # 💡 [강제 방어 2] 글자가 길어도 절대 숨기지 마!
                                 ))
                     )
                     
@@ -144,7 +142,10 @@ if st.session_state.get("authentication_status") == True:
                         base_s.mark_line(color='#0068c9', size=3), 
                         base_s.mark_circle(size=150, color='#0068c9'),
                         base_s.mark_text(dy=-20, fontSize=15, fontWeight='bold', color='black', clip=False).encode(text=alt.Text('매출:Q', format=","))
-                    ).properties(height=350)
+                    ).properties(
+                        height=350,
+                        padding={"left": 60, "right": 20} # 💡 [강제 방어 3] 무슨 일이 있어도 왼쪽 여백 60px을 확보해!
+                    )
                     
                     st.altair_chart(chart2, use_container_width=True, theme=None)
 
