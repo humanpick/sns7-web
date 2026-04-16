@@ -6,7 +6,7 @@ import altair as alt
 import bcrypt
 
 # ==========================================
-# 1. 시스템 설정 및 디자인 무결성 프로토콜 (CSS)
+# 1. 디자인 무결성 및 번역 방지 프로토콜 (CSS)
 # ==========================================
 st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide")
 
@@ -14,10 +14,10 @@ NAVY = "#001F3F"
 GOLD = "#D4AF37"
 BG_GRAY = "#F8F9FA"
 
-# 💡 [핵심 해결] 중괄호를 {{ }} 처럼 두 번씩 써서 파이썬과의 충돌을 원천 차단했습니다.
-# 이 코드가 상단에 글자가 뜨는 현상을 완벽하게 잡아줍니다.
+# 💡 [핵심 해결] 스타일 태그에 translate="no" 속성과 notranslate 클래스를 부여하여
+# 브라우저 번역기가 코드를 한글로 바꾸는 것을 물리적으로 차단합니다.
 st.markdown(f"""
-    <meta name="google" content="notranslate">
+    <div class="notranslate" translate="no">
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;700&display=swap');
     
@@ -59,10 +59,11 @@ st.markdown(f"""
     /* 불필요한 마진 제거 */
     [data-testid="stMarkdownContainer"] p {{ margin-bottom: 0px; }}
     </style>
+    </div>
 """, unsafe_allow_html=True)
 
 # ------------------------------------------
-# [필수] Supabase 연결 정보
+# [필수] Supabase 연결 정보 (민준 님의 정보를 입력하세요)
 # ------------------------------------------
 SUPABASE_URL = "https://pjpnaqyyzlkolnfvlpps.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBqcG5hcXl5emxrb2xuZnZscHBzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxOTEwNzgsImV4cCI6MjA5MTc2NzA3OH0.Y1kR473B-XdxnZZG3akAsp6kvGxTIL1S8IG7is8mgMM"
@@ -114,9 +115,6 @@ if st.session_state.get("authentication_status"):
         st.write(f"**{real_name}**님 반갑습니다.")
         authenticator.logout('시스템 로그아웃', 'sidebar')
 
-    # ------------------------------------------
-    # 👑 [ADMIN] 관리자 대시보드
-    # ------------------------------------------
     if user_role == 'admin':
         st.title("👑 관리자 데이터 센터")
         tab1, tab2, tab3 = st.tabs(["📝 리포트 발행", "👥 고객 관리", "📜 발행 이력"])
@@ -137,7 +135,7 @@ if st.session_state.get("authentication_status"):
                             "client_id": selected_client, "company_name": comp_name,
                             "credit_score": str(score), "monthly_sales": str(sales), "strategy_comment": comment
                         }).execute()
-                        st.success("성공적으로 발행되었습니다.")
+                        st.success("발행 완료")
                         st.rerun()
 
         with tab2:
@@ -147,13 +145,9 @@ if st.session_state.get("authentication_status"):
                 r_name = st.text_input("이름")
                 if st.form_submit_button("고객 등록"):
                     hpw = bcrypt.hashpw(r_pw.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-                    supabase.table('users').insert({"username": r_id, "name": r_name, "password": hpw, "role": "viewer"}).execute()
+                    supabase.table.insert({"username": r_id, "name": r_name, "password": hpw, "role": "viewer"}).execute()
                     st.success("등록 완료")
                     st.rerun()
-
-    # ------------------------------------------
-    # 📈 [VIEWER] 프리미엄 경영 리포트
-    # ------------------------------------------
     else:
         try:
             res = supabase.table('client_data').select('*').eq('client_id', username).order('created_at').execute()
@@ -165,7 +159,7 @@ if st.session_state.get("authentication_status"):
                 latest = df.iloc[-1]
 
                 st.markdown(f"""
-                    <div style="border-bottom: 2px solid {GOLD}; padding-bottom: 10px; margin-bottom: 30px;">
+                    <div class="notranslate" translate="no" style="border-bottom: 2px solid {GOLD}; padding-bottom: 10px; margin-bottom: 30px;">
                         <span style="color: {NAVY}; font-size: 1.1rem; font-weight: 300;">SNS7 BUSINESS ANALYTICS</span>
                         <h1 style="color: {NAVY}; margin-top: 5px; font-weight: 700;">{real_name} 대표님 맞춤형 경영 리포트</h1>
                     </div>
@@ -173,11 +167,11 @@ if st.session_state.get("authentication_status"):
 
                 col1, col2, col3 = st.columns(3)
                 with col1:
-                    st.markdown(f'<div class="report-card"><p class="metric-label">분석 업체명</p><p class="metric-value">{latest["company_name"]}</p></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="report-card notranslate" translate="no"><p class="metric-label">분석 업체명</p><p class="metric-value">{latest["company_name"]}</p></div>', unsafe_allow_html=True)
                 with col2:
-                    st.markdown(f'<div class="report-card"><p class="metric-label">현재 신용점수</p><p class="metric-value">{latest["점수"]} 점</p></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="report-card notranslate" translate="no"><p class="metric-label">현재 신용점수</p><p class="metric-value">{latest["점수"]} 점</p></div>', unsafe_allow_html=True)
                 with col3:
-                    st.markdown(f'<div class="report-card"><p class="metric-label">최근 월 매출</p><p class="metric-value">{int(pd.to_numeric(latest["monthly_sales"])):,} 만원</p></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="report-card notranslate" translate="no"><p class="metric-label">최근 월 매출</p><p class="metric-value">{int(pd.to_numeric(latest["monthly_sales"])):,} 만원</p></div>', unsafe_allow_html=True)
 
                 g_col1, g_col2 = st.columns(2)
                 with g_col1:
@@ -195,13 +189,11 @@ if st.session_state.get("authentication_status"):
                     st.altair_chart(area, use_container_width=True)
 
                 st.markdown(f"""
-                    <div style="background-color: {NAVY}; color: white; padding: 2.5rem; border-radius: 15px; margin-top: 2rem;">
+                    <div class="notranslate" translate="no" style="background-color: {NAVY}; color: white; padding: 2.5rem; border-radius: 15px; margin-top: 2rem;">
                         <h3 style="color: {GOLD}; margin-bottom: 1rem;">💡 공민준 센터장의 경영 전략 제언</h3>
                         <p style="font-size: 1.15rem; line-height: 1.9; opacity: 0.95; white-space: pre-wrap;">{latest['strategy_comment']}</p>
                     </div>
                 """, unsafe_allow_html=True)
-                
-                # 푸터 생략 가능 (프로필 고정)
             else: st.warning("발행된 리포트가 없습니다.")
         except Exception as e: st.error(f"오류: {e}")
 
