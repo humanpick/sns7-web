@@ -81,6 +81,10 @@ if st.session_state.get("authentication_status") == True:
                 df['점수'] = pd.to_numeric(df['credit_score'], errors='coerce').fillna(0).astype(int)
                 df['매출'] = pd.to_numeric(df['monthly_sales'], errors='coerce').fillna(0).astype(int)
 
+                # 💡 [핵심 방어 1] 차트 엔진이 계산하다가 뻗지 않도록, 글자를 미리 여기서 예쁘게 만들어 둡니다!
+                df['점수_텍스트'] = df['점수'].astype(str)
+                df['매출_텍스트'] = df['매출'].apply(lambda x: f"{x:,}")
+
                 latest = df.iloc[-1]
                 safe_score, safe_sales = int(latest['점수']), int(latest['매출'])
                 
@@ -108,7 +112,7 @@ if st.session_state.get("authentication_status") == True:
                     st.subheader("🛡️ 신용점수 분석 추이")
                     base = alt.Chart(df).encode(
                         x=x_ax, 
-                        y=alt.Y('점수:Q', scale=alt.Scale(domain=[500, 1000], zero=False), title='점수', axis=alt.Axis(labelColor='black'))
+                        y=alt.Y('점수:Q', scale=alt.Scale(domain=[500, 1000], clamp=True), title='점수', axis=alt.Axis(labelColor='black'))
                     )
                     rule = alt.Chart(pd.DataFrame({'y': [839]})).mark_rule(strokeDash=[5,5], color='gray').encode(y='y:Q')
                     
@@ -116,7 +120,8 @@ if st.session_state.get("authentication_status") == True:
                         rule, 
                         base.mark_line(color='#ff4b4b', size=3), 
                         base.mark_circle(size=150, color='#ff4b4b'), 
-                        base.mark_text(dy=-20, fontSize=15, fontWeight='bold', color='black', clip=False).encode(text='점수:Q')
+                        # 💡 엔진 포맷팅 오류를 피해 미리 만든 '점수_텍스트'를 그대로 도장 찍습니다.
+                        base.mark_text(dy=-20, fontSize=15, fontWeight='bold', color='black', clip=False).encode(text='점수_텍스트:N')
                     ).properties(height=350)
                     
                     st.altair_chart(chart1, use_container_width=True, theme=None)
@@ -124,28 +129,26 @@ if st.session_state.get("authentication_status") == True:
 
                 with col2:
                     st.subheader("💰 월 매출 성장 추이")
-                    smart_label_expr = "datum.value == 0 ? '0원' : (datum.value >= 10000 ? (datum.value / 10000) + '억' : datum.value + '만원')"
+                    
+                    # 가장 안정적인 축 레이블 수식
+                    safe_label_expr = "datum.value == 0 ? '0원' : (datum.value >= 10000 ? (datum.value / 10000) + '억' : datum.value + '만')"
                     
                     base_s = alt.Chart(df).encode(
                         x=x_ax, 
-                        y=alt.Y('매출:Q', scale=alt.Scale(domain=[0, 50000], nice=False, clamp=True), title='매출', 
+                        y=alt.Y('매출:Q', scale=alt.Scale(domain=[0, 50000], clamp=True), title='매출', 
                                 axis=alt.Axis(
                                     values=[0, 1000, 2000, 3000, 5000, 10000, 20000, 30000, 50000], 
-                                    labelExpr=smart_label_expr, 
-                                    labelColor='black',
-                                    labelOverlap=True, # 💡 [강제 방어 1] 겹쳐도 무조건 렌더링!
-                                    labelLimit=500     # 💡 [강제 방어 2] 글자가 길어도 절대 숨기지 마!
+                                    labelExpr=safe_label_expr, 
+                                    labelColor='black'
                                 ))
                     )
                     
                     chart2 = alt.layer(
                         base_s.mark_line(color='#0068c9', size=3), 
                         base_s.mark_circle(size=150, color='#0068c9'),
-                        base_s.mark_text(dy=-20, fontSize=15, fontWeight='bold', color='black', clip=False).encode(text=alt.Text('매출:Q', format=","))
-                    ).properties(
-                        height=350,
-                        padding={"left": 60, "right": 20} # 💡 [강제 방어 3] 무슨 일이 있어도 왼쪽 여백 60px을 확보해!
-                    )
+                        # 💡 엔진 포맷팅 오류를 피해 미리 만든 '매출_텍스트'를 그대로 도장 찍습니다.
+                        base_s.mark_text(dy=-20, fontSize=15, fontWeight='bold', color='black', clip=False).encode(text='매출_텍스트:N')
+                    ).properties(height=350)
                     
                     st.altair_chart(chart2, use_container_width=True, theme=None)
 
