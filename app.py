@@ -19,7 +19,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# [필수] 센터장님의 Supabase 정보를 입력하세요.
 SUPABASE_URL = "https://pjpnaqyyzlkolnfvlpps.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBqcG5hcXl5emxrb2xuZnZscHBzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxOTEwNzgsImV4cCI6MjA5MTc2NzA3OH0.Y1kR473B-XdxnZZG3akAsp6kvGxTIL1S8IG7is8mgMM"
 
@@ -107,9 +106,10 @@ if st.session_state.get("authentication_status") == True:
 
                 with col1:
                     st.subheader("🛡️ 신용점수 분석 추이")
+                    # 💡 [해결 1] zero=False를 명시하여 0점을 완전히 배제하고 500부터 시작
                     base = alt.Chart(df).encode(
                         x=x_ax, 
-                        y=alt.Y('점수:Q', scale=alt.Scale(domain=[500, 1000], nice=False, clamp=True), title='점수', axis=alt.Axis(labelColor='black'))
+                        y=alt.Y('점수:Q', scale=alt.Scale(domain=[500, 1000], zero=False), title='점수', axis=alt.Axis(labelColor='black'))
                     )
                     rule = alt.Chart(pd.DataFrame({'y': [839]})).mark_rule(strokeDash=[5,5], color='gray').encode(y='y:Q')
                     
@@ -125,11 +125,11 @@ if st.session_state.get("authentication_status") == True:
 
                 with col2:
                     st.subheader("💰 월 매출 성장 추이")
-                    # 💡 [진짜 해결] 1e+4 방지를 위해 format=",.0f" 로 변경하여 강제 콤마 표기
+                    # 💡 [해결 2] 한글을 빼고, 요청하신 간격의 숫자를 format=","로 강제 지정
                     base_s = alt.Chart(df).encode(
                         x=x_ax, 
-                        y=alt.Y('매출:Q', scale=alt.Scale(domain=[0, 50000], nice=False, clamp=True), title='매출(만원)', 
-                                axis=alt.Axis(values=[0,10000,20000,30000,40000,50000], format=",.0f", labelColor='black'))
+                        y=alt.Y('매출:Q', scale=alt.Scale(domain=[0, 50000]), title='매출(단위: 만원)', 
+                                axis=alt.Axis(values=[0, 1000, 2000, 3000, 5000, 10000, 20000, 30000, 50000], format=",", labelColor='black'))
                     )
                     
                     chart2 = alt.layer(
@@ -139,7 +139,7 @@ if st.session_state.get("authentication_status") == True:
                     ).properties(height=350)
                     
                     st.altair_chart(chart2, use_container_width=True, theme=None)
-                    st.caption("※ 차트 범위: 0원 ~ 5억 원 (50,000만 원)")
+                    st.caption("※ Y축 10,000 = 1억 원 / 차트 범위: 0원 ~ 5억 원")
 
                 st.divider()
                 st.subheader("💡 공민준 센터장의 핵심 경영 제언")
