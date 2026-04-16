@@ -14,23 +14,23 @@ st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide"
 NAVY = "#001F3F"
 GOLD = "#D4AF37"
 
-# 💡 [필독] CSS 내의 중괄호를 {{ }}로 두 번 써서 파이썬 f-string과 충돌을 막았습니다.
-# 이 설정이 상단 에러 메시지를 없애고 디자인을 정상화합니다.
-st.markdown(f"""
-    <meta name="google" content="notranslate">
-    <style>
+# 💡 [해결] f-string 외부에서 스타일을 정의하여 상단 텍스트 노출 에러를 원천 차단합니다.
+style_code = f"""
+<style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;500;700&display=swap');
     
     html, body, [class*="css"] {{ 
         font-family: 'Noto Sans KR', sans-serif !important; 
     }}
     
-    .stApp {{ background-color: #FDFDFD; }}
+    .stApp {{ background-color: #FDFDFD !important; }}
     
     /* 사이드바 디자인 */
     [data-testid="stSidebar"] {{ 
         background-color: {NAVY} !important; 
-        color: white !important; 
+    }}
+    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div > div {{
+        color: white !important;
     }}
     [data-testid="stSidebar"] * {{ color: white !important; }}
 
@@ -49,7 +49,7 @@ st.markdown(f"""
         padding-top: 1rem !important; 
         margin-top: -30px !important; 
     }}
-    header {{ visibility: hidden; height: 0px; }}
+    header {{ visibility: hidden !important; height: 0px !important; }}
     [data-testid="stElementActions"], .vega-actions {{ display: none !important; }}
     
     /* 카드형 메트릭 디자인 */
@@ -60,11 +60,13 @@ st.markdown(f"""
         border-radius: 10px !important;
         box-shadow: 2px 2px 10px rgba(0,0,0,0.05) !important;
     }}
-    </style>
-""", unsafe_allow_html=True)
+</style>
+<meta name="google" content="notranslate">
+"""
+st.markdown(style_code, unsafe_allow_html=True)
 
 # ------------------------------------------
-# [필수] Supabase 연결 정보 (Key를 꼭 입력하세요!)
+# [필수] Supabase 연결 정보 (민준님의 Key를 입력하세요!)
 # ------------------------------------------
 SUPABASE_URL = "https://pjpnaqyyzlkolnfvlpps.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBqcG5hcXl5emxrb2xuZnZscHBzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxOTEwNzgsImV4cCI6MjA5MTc2NzA3OH0.Y1kR473B-XdxnZZG3akAsp6kvGxTIL1S8IG7is8mgMM"
@@ -81,7 +83,7 @@ except Exception as e:
     st.stop()
 
 # ==========================================
-# 2. 사용자 인증 및 데이터 로딩 함수
+# 2. 사용자 인증 및 데이터 로딩
 # ==========================================
 def fetch_users():
     try:
@@ -98,19 +100,16 @@ def fetch_users():
 credentials = fetch_users()
 authenticator = stauth.Authenticate(credentials, 'ceo_portal_cookie', 'signature_key', cookie_expiry_days=30)
 
-# 로그인 화면 출력
 authenticator.login('main')
 
 if st.session_state.get("authentication_status"):
     username = st.session_state["username"]
     
-    # 실시간 이름 가져오기
     try:
         user_res = supabase.table('users').select('name').eq('username', username).execute()
         real_name = user_res.data[0]['name'] if user_res.data else credentials['usernames'][username]['name']
     except: real_name = credentials['usernames'][username]['name']
 
-    # 사이드바 설정
     with st.sidebar:
         st.write(f"### 💼 CEO 전용 채널")
         st.write(f"**{real_name}** 대표님 반갑습니다.")
@@ -118,10 +117,10 @@ if st.session_state.get("authentication_status"):
 
     if credentials['usernames'][username]['role'] == 'admin':
         st.title("👑 관리자 대시보드")
-        st.info("현재 관리자 권한으로 접속 중입니다.")
+        st.info("관리자 권한으로 접속 중입니다.")
     else:
         # ==========================================
-        # 3. 대표님 맞춤형 경영 리포트 출력
+        # 3. 맞춤형 경영 리포트 출력
         # ==========================================
         try:
             res = supabase.table('client_data').select('*').eq('client_id', username).order('created_at').execute()
@@ -131,19 +130,17 @@ if st.session_state.get("authentication_status"):
                 df['created_at'] = pd.to_datetime(df.get('created_at', pd.Timestamp.now())).dt.tz_localize(None)
                 df['날짜'] = df['created_at'].dt.strftime('%Y-%m-%d')
                 
-                # 데이터 정제 (숫자형 변환 및 스케일링)
                 df['점수'] = pd.to_numeric(df['credit_score'], errors='coerce').fillna(0).astype(int)
                 df['매출'] = pd.to_numeric(df['monthly_sales'], errors='coerce').fillna(0).astype(int)
-                df['매출_억'] = df['매출'] / 10000.0  # 💡 1e+4 오류 방지를 위한 억 단위 변환
+                df['매출_억'] = df['매출'] / 10000.0  # 💡 엔진 에러 방지용 스케일링
 
-                # 텍스트 라벨 미리 생성
                 df['점수_텍스트'] = df['점수'].astype(str)
                 df['매출_텍스트'] = df['매출'].apply(lambda x: f"{x:,}")
 
                 latest = df.iloc[-1]
                 safe_score, safe_sales = int(latest['점수']), int(latest['매출'])
                 
-                # 상단 리포트 헤더
+                # 상단 헤더 배너
                 st.markdown(f"""
                     <div style="background: linear-gradient(135deg, {NAVY} 0%, #003366 100%); 
                                 padding: 30px; border-radius: 15px; border-left: 10px solid {GOLD}; 
@@ -157,7 +154,6 @@ if st.session_state.get("authentication_status"):
                     </div>
                 """, unsafe_allow_html=True)
 
-                # 주요 지표 (메트릭)
                 m1, m2, m3 = st.columns(3)
                 m1.metric("성함", real_name)
                 m2.metric("최신 신용점수", f"{safe_score} 점")
@@ -165,7 +161,6 @@ if st.session_state.get("authentication_status"):
 
                 st.divider()
 
-                # 그래프 섹션
                 col1, col2 = st.columns(2)
                 x_ax = alt.X('날짜:N', title='분석 기준일', axis=alt.Axis(labelAngle=0, labelColor='black'))
 
