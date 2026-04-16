@@ -66,7 +66,6 @@ if st.session_state.get("authentication_status") == True:
 
     if credentials['usernames'][username]['role'] == 'admin':
         st.title("👑 관리자 대시보드")
-        st.info("고객 데이터 관리 화면입니다.")
     else:
         st.title(f"📈 {real_name} 대표님 맞춤형 경영 리포트")
         
@@ -81,7 +80,6 @@ if st.session_state.get("authentication_status") == True:
                 df['점수'] = pd.to_numeric(df['credit_score'], errors='coerce').fillna(0).astype(int)
                 df['매출'] = pd.to_numeric(df['monthly_sales'], errors='coerce').fillna(0).astype(int)
 
-                # 숫자가 사라지지 않도록 미리 문자로 강제 변환
                 df['점수_텍스트'] = df['점수'].astype(str)
                 df['매출_텍스트'] = df['매출'].apply(lambda x: f"{x:,}")
 
@@ -110,7 +108,6 @@ if st.session_state.get("authentication_status") == True:
 
                 with col1:
                     st.subheader("🛡️ 신용점수 분석 추이")
-                    # 💡 [해결 1] zero=False를 다시 부활시켜 무조건 500점부터 시작하도록 강제!
                     base = alt.Chart(df).encode(
                         x=x_ax, 
                         y=alt.Y('점수:Q', scale=alt.Scale(domain=[500, 999], zero=False, clamp=True), title='점수', axis=alt.Axis(labelColor='black'))
@@ -130,14 +127,14 @@ if st.session_state.get("authentication_status") == True:
                 with col2:
                     st.subheader("💰 월 매출 성장 추이")
                     
-                    # 💡 [해결 2] 수식 계산 삭제! 100% 안전한 1:1 강제 매핑 구조로 변경
-                    safe_label_expr = "datum.value == 20000 ? '2억원' : datum.value == 10000 ? '1억원' : datum.value == 5000 ? '5천만원' : datum.value == 3000 ? '3천만원' : datum.value == 2000 ? '2천만원' : datum.value == 1000 ? '1천만원' : '0원'"
+                    # 💡 [핵심] 간격을 딱 5000(5천만원) 단위로 일정하게 통일!
+                    safe_label_expr = "datum.value == 20000 ? '2억원' : datum.value == 15000 ? '1억5천만' : datum.value == 10000 ? '1억원' : datum.value == 5000 ? '5천만원' : '0원'"
                     
                     base_s = alt.Chart(df).encode(
                         x=x_ax, 
                         y=alt.Y('매출:Q', scale=alt.Scale(domain=[0, 20000], clamp=True), title='매출', 
                                 axis=alt.Axis(
-                                    values=[0, 1000, 2000, 3000, 5000, 10000, 20000], 
+                                    values=[0, 5000, 10000, 15000, 20000], # 간격 완벽하게 일치
                                     labelExpr=safe_label_expr, 
                                     labelColor='black'
                                 ))
