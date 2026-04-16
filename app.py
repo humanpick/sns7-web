@@ -6,7 +6,7 @@ import altair as alt
 import bcrypt
 
 # ==========================================
-# 1. 디자인 및 레이아웃 설정 (클린 UI 유지)
+# 1. 디자인 및 레이아웃 설정 (클린 UI 및 번역 방지)
 # ==========================================
 st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide")
 
@@ -14,7 +14,7 @@ NAVY = "#001F3F"
 GOLD = "#D4AF37"
 BG_COLOR = "#F4F7F9"
 
-# 💡 상단 텍스트 노출 차단을 위한 CSS 주입
+# 💡 상단 텍스트 노출 및 번역기 간섭 차단
 st.write(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;700&display=swap');
@@ -75,7 +75,7 @@ def init_supabase():
 supabase = init_supabase()
 
 # ==========================================
-# 2. 데이터 및 인증 로직 (캐싱 최적화)
+# 2. 데이터 및 인증 로직
 # ==========================================
 def fetch_creds():
     try:
@@ -91,7 +91,7 @@ def fetch_creds():
 if 'creds' not in st.session_state:
     st.session_state.creds = fetch_creds()
 
-authenticator = stauth.Authenticate(st.session_state.creds, 'ceo_portal_v17', 'key_v17', 30)
+authenticator = stauth.Authenticate(st.session_state.creds, 'ceo_portal_v18', 'key_v18', 30)
 authenticator.login('main')
 
 if st.session_state.get("authentication_status"):
@@ -112,11 +112,11 @@ if st.session_state.get("authentication_status"):
             if not v_list: st.info("등록된 고객이 없습니다.")
             else:
                 sel_id = st.selectbox("대상 선택", v_list, format_func=lambda x: f"{st.session_state.creds['usernames'][x]['name']} ({x})")
-                with st.form("input_v17"):
+                with st.form("input_v18"):
                     comp = st.text_input("분석 업체명 (예: 불타는닭발)")
-                    c1, c2 = st.columns(2)
-                    sc = c1.number_input("신용점수", 300, 1000, 850)
-                    sa = c2.number_input("월 매출액(단위: 만원)", 0, 100000, 1300)
+                    col1, col2 = st.columns(2)
+                    sc = col1.number_input("신용점수", 300, 1000, 850)
+                    sa = col2.number_input("월 매출액(만원)", 0, 100000, 1300)
                     cmt = st.text_area("공민준 센터장의 경영 전략 제시")
                     if st.form_submit_button("리포트 발행하기"):
                         supabase.table('client_data').insert({
@@ -134,7 +134,7 @@ if st.session_state.get("authentication_status"):
             res = supabase.table('client_data').select('*').eq('client_id', username).order('created_at').execute()
             if res.data:
                 df = pd.DataFrame(res.data)
-                # 💡 [수정] 날짜를 '월-일' 형태로만 표기 (가독성 강화)
+                # 💡 날짜를 '월-일' 형태로만 표기
                 df['날짜'] = pd.to_datetime(df['created_at']).dt.strftime('%m-%d')
                 df['점수'] = pd.to_numeric(df['credit_score']).astype(int)
                 df['매출'] = pd.to_numeric(df['monthly_sales']).astype(int)
@@ -145,7 +145,9 @@ if st.session_state.get("authentication_status"):
                 # 타이틀 및 상태 배너
                 st.markdown(f"<h3 style='color:{GOLD}; margin-bottom:0;'>SNS7 비즈니스 분석</h3>", unsafe_allow_html=True)
                 st.markdown(f"<h1 style='color:{NAVY}; margin-top:0;'>{real_name} 대표님 경영 분석 리포트</h1>", unsafe_allow_html=True)
-                status_msg = '신용 관리 집중 필요' if latest['점'수'] < 840 else '정책자금 승인 권장권'
+                
+                # 💡 [해결] SyntaxError가 발생했던 지점 수정 완료
+                status_msg = '신용 관리 집중 필요' if latest['점수'] < 840 else '정책자금 승인 권장권'
                 st.markdown(f"<p style='color:#E74C3C; font-weight:700;'>● {status_msg}</p>", unsafe_allow_html=True)
 
                 st.write("")
@@ -173,7 +175,6 @@ if st.session_state.get("authentication_status"):
 
                 with c2:
                     st.markdown(f"**💰 매출 성장 곡선 (단위: 억)**")
-                    # 💡 [수정] 매출 그래프 점 위에 금액 표기 추가
                     base_s = alt.Chart(df).encode(x=alt.X('날짜:N', title=None, axis=alt.Axis(labelAngle=0)))
                     area_s = base_s.mark_area(
                         line={'color': '#3498DB', 'width': 3},
@@ -181,7 +182,6 @@ if st.session_state.get("authentication_status"):
                     ).encode(y=alt.Y('매출_억:Q', scale=alt.Scale(domain=[0, 2]), title=None))
                     
                     points_s = base_s.mark_circle(size=120, color='#3498DB').encode(y='매출_억:Q')
-                    # 💡 금액 텍스트 표기 레이어
                     labels_s = points_s.mark_text(dy=-20, fontSize=13, fontWeight='bold', color='#3498DB').encode(text='매출_표기:N')
                     
                     st.altair_chart((area_s + points_s + labels_s).properties(height=300), use_container_width=True)
