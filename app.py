@@ -131,7 +131,7 @@ elif st.session_state["authentication_status"] == True:
                         st.error(f"저장 실패: {e}")
 
     # ==========================================
-    # 4-B. [고객 모드] 업체 대표님 전용 (그래프 강제 렌더링)
+    # 4-B. [고객 모드] 업체 대표님 전용 (그래프 최종 완성)
     # ==========================================
     else:
         st.title(f"📈 {name} 대표님 맞춤형 경영 리포트")
@@ -141,14 +141,11 @@ elif st.session_state["authentication_status"] == True:
             
             if res.data:
                 df = pd.DataFrame(res.data)
-                
                 if 'created_at' not in df.columns:
                     df['created_at'] = '2026-01-01T00:00:00'
                 
                 df = df.sort_values('created_at')
-                # YYYY-MM-DD 형식으로 예쁘게 자르기
                 df['입력일시'] = df['created_at'].astype(str).str[:10]
-                
                 df['신용점수'] = pd.to_numeric(df['credit_score'], errors='coerce').fillna(0).astype(int)
                 df['매출(만원)'] = pd.to_numeric(df['monthly_sales'], errors='coerce').fillna(0).astype(int)
                 
@@ -181,41 +178,34 @@ elif st.session_state["authentication_status"] == True:
                 with col1:
                     st.subheader("🛡️ 신용점수 분석 추이")
                     
-                    # [강제 표시] axis=alt.Axis() 설정을 통해 숫자를 무조건 화면에 박아버립니다.
+                    # Y축을 0~999로 엄격히 고정
                     base_score = alt.Chart(df).encode(
-                        x=alt.X('입력일시:N', title='데이터 입력 날짜', axis=alt.Axis(labelAngle=0, grid=True)),
-                        y=alt.Y('신용점수:Q', scale=alt.Scale(domain=[0, 999]), title='신용점수 (0~999점)', 
-                                axis=alt.Axis(values=[0, 200, 400, 600, 800, 999], grid=True))
+                        x=alt.X('입력일시:N', title='데이터 입력 날짜'),
+                        y=alt.Y('신용점수:Q', scale=alt.Scale(domain=[0, 999]), title='신용점수 (0~999점)')
                     )
+                    line_score = base_score.mark_line(color='#ff4b4b', point=alt.OverlayMarkDef(color='#ff4b4b', size=150))
                     
-                    # 빨간색 선과 큰 점
-                    line_score = base_score.mark_line(color='red', point=alt.OverlayMarkDef(color='red', size=150))
-                    # 점 바로 밑에 숫자 크게 찍기
-                    text_score = base_score.mark_text(dy=20, fontSize=16, fontWeight='bold', color='black').encode(text=alt.Text('신용점수:Q'))
-                    # 839점 기준선
+                    # [수정] 글자가 바닥에 잘리지 않도록 점의 위쪽(dy=-20)으로 살짝 띄웠습니다!
+                    text_score = base_score.mark_text(dy=-20, fontSize=16, fontWeight='bold', color='black').encode(text=alt.Text('신용점수:Q'))
                     rule_score = alt.Chart(pd.DataFrame({'y': [839]})).mark_rule(strokeDash=[5, 5], color='gray').encode(y='y:Q')
                     
-                    # [핵심] theme=None 을 줘서 Streamlit이 마음대로 축을 못 숨기게 차단!
-                    st.altair_chart((rule_score + line_score + text_score).properties(height=350), use_container_width=True, theme=None)
+                    st.altair_chart((rule_score + line_score + text_score).properties(height=350), use_container_width=True)
                     st.caption("※ 회색 점선: 정책자금 권장 기준선 (839점)")
 
                 with col2:
                     st.subheader("💰 월 매출 성장 추이")
                     
-                    # [강제 표시] 0부터 5억까지 간격을 직접 지정
+                    # Y축을 0~50,000으로 엄격히 고정
                     base_sales = alt.Chart(df).encode(
-                        x=alt.X('입력일시:N', title='데이터 입력 날짜', axis=alt.Axis(labelAngle=0, grid=True)),
-                        y=alt.Y('매출(만원):Q', scale=alt.Scale(domain=[0, 50000]), title='월 매출액 (만원)', 
-                                axis=alt.Axis(values=[0, 10000, 20000, 30000, 40000, 50000], format=',', grid=True))
+                        x=alt.X('입력일시:N', title='데이터 입력 날짜'),
+                        y=alt.Y('매출(만원):Q', scale=alt.Scale(domain=[0, 50000]), title='월 매출액 (만원)')
                     )
+                    line_sales = base_sales.mark_line(color='#0068c9', point=alt.OverlayMarkDef(color='#0068c9', size=150))
                     
-                    # 파란색 선과 큰 점
-                    line_sales = base_sales.mark_line(color='blue', point=alt.OverlayMarkDef(color='blue', size=150))
-                    # 점 바로 밑에 숫자 크게 찍기 (천 단위 콤마)
-                    text_sales = base_sales.mark_text(dy=20, fontSize=16, fontWeight='bold', color='black').encode(text=alt.Text('매출(만원):Q', format=','))
+                    # [수정] 글자가 안 잘리게 위로 올리고, 천 단위 콤마(,) 포맷팅 유지
+                    text_sales = base_sales.mark_text(dy=-20, fontSize=16, fontWeight='bold', color='black').encode(text=alt.Text('매출(만원):Q', format=','))
                     
-                    # [핵심] theme=None 적용
-                    st.altair_chart((line_sales + text_sales).properties(height=350), use_container_width=True, theme=None)
+                    st.altair_chart((line_sales + text_sales).properties(height=350), use_container_width=True)
                     st.caption("※ 차트 범위: 0원 ~ 5억 원 (50,000만 원)")
 
                 st.divider()
