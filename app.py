@@ -3,7 +3,7 @@ import streamlit_authenticator as stauth
 from supabase import create_client, Client
 import pandas as pd
 import bcrypt
-import numpy as np
+import altair as alt
 
 # ==========================================
 # 1. 시스템 설정 및 Supabase 연동
@@ -105,10 +105,10 @@ elif st.session_state["authentication_status"] == True:
             col1, col2 = st.columns(2)
             with col1:
                 c_id = st.text_input("고객 ID", placeholder="예: client_kim")
-                c_name = st.text_input("업체명", placeholder="예: (주)인슈테크")
+                c_name = st.text_input("대표자 이름", placeholder="예: 홍길동")
             with col2:
-                c_score = st.number_input("신용점수", min_value=0, max_value=1000, value=850)
-                c_sales = st.number_input("월 매출 (만원 단위)", min_value=0, step=100)
+                c_score = st.number_input("신용점수", min_value=0, max_value=999, value=850)
+                c_sales = st.number_input("월 매출 (만원 단위)", min_value=0, max_value=50000, step=100)
             c_comment = st.text_area("센터장님 전용 전략 코멘트")
             
             if st.form_submit_button("DB 저장 및 계정 생성"):
@@ -116,34 +116,25 @@ elif st.session_state["authentication_status"] == True:
                     try:
                         temp_hash = bcrypt.hashpw('1234'.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
                         supabase.table('users').upsert({
-                            'username': c_id, 
-                            'password': temp_hash,
-                            'name': c_name,
-                            'role': 'client'
+                            'username': c_id, 'password': temp_hash, 'name': c_name, 'role': 'client'
                         }).execute()
 
                         supabase.table('client_data').upsert({
-                            'client_id': c_id, 
-                            'company_name': c_name,
-                            'credit_score': c_score, 
-                            'monthly_sales': c_sales,
-                            'strategy_comment': c_comment
+                            'client_id': c_id, 'company_name': f"{c_name}_상호", # 내부 관리용
+                            'credit_score': c_score, 'monthly_sales': c_sales, 'strategy_comment': c_comment
                         }).execute()
 
-                        st.success(f"✅ [{c_name}] 대표님의 데이터 저장 및 로그인 계정이 생성되었습니다! (초기비번: 1234)")
+                        st.success(f"✅ [{c_name}] 대표님의 리포트 발행 및 계정 생성이 완료되었습니다!")
                         st.balloons()
                         st.rerun()
                     except Exception as e:
                         st.error(f"저장 실패: {e}")
-                else:
-                    st.warning("고객 ID와 업체명은 필수입니다.")
 
     # ==========================================
     # 4-B. [고객 모드] 업체 대표님 전용 (시각화 강화)
     # ==========================================
     else:
         st.title(f"📈 {name} 대표님 맞춤형 경영 리포트")
-        st.caption("공민준 센터장의 전문 진단 결과입니다.")
         
         try:
             res = supabase.table('client_data').select('*').eq('client_id', username).execute()
@@ -152,54 +143,72 @@ elif st.session_state["authentication_status"] == True:
                 safe_score = int(user_data.get('credit_score', 0))
                 safe_sales = int(user_data.get('monthly_sales', 0))
                 
-                # 상단 지표
-                col1, col2, col3 = st.columns(3)
-                col1.metric("대표자 성함", name)
-                col2.metric("신용점수 진단", f"{safe_score} 점")
-                col3.metric("최근 월 매출액", f"{safe_sales:,} 만원")
+                # [839점 기준 자동 배경색 설정]
+                bg_color = "#87CEEB" if safe_score > 839 else "#FFCCCC"
+                text_color = "#000000"
+                status_text = "정책자금 기준(839) 충족" if safe_score > 839 else "정책자금 기준(839) 미달"
+
+                # 커스텀 스타일 박스
+                st.markdown(f"""
+                    <div style="background-color:{bg_color}; padding:20px; border-radius:10px; border: 2px solid #333;">
+                        <h2 style="color:{text_color}; margin:0;">현재 상태: {status_text}</h2>
+                        <p style="color:{text_color}; font-size:18px; margin:10px 0 0 0;">
+                            <b>{name}</b> 대표님의 현재 신용점수는 <b>{safe_score}점</b> 입니다.
+                        </p>
+                    </div>
+                """, unsafe_allow_html=True)
                 
                 st.divider()
+
+                # --- 그래프 섹션 ---
+                col1, col2 = st.columns(2)
                 
-                # --- 그래프 영역 ---
-                st.subheader("📊 경영 핵심 지표 추이 (점과 선)")
-                chart_col1, chart_col2 = st.columns(2)
-                
-                # [그래프 1] 신용점수 우상향 트렌드
-                with chart_col1:
-                    st.write("**🛡️ 신용점수 관리 추이**")
-                    # 우상향 트렌드를 시각화하기 위해 과거 가상 데이터를 생성
-                    score_history = [safe_score - 40, safe_score - 15, safe_score]
+                # 1. 신용점수 정밀 그래프 (점과 선, 0~999 고정)
+                with col1:
+                    st.subheader("🛡️ 신용점수 정밀 분석")
+                    score_history = [max(0, safe_score-50), max(0, safe_score-20), safe_score]
                     df_score = pd.DataFrame({
                         "시점": ["과거", "직전", "현재"],
-                        "점수": score_history,
-                        "정책자금 기준(839)": [839, 839, 839]
+                        "점수": score_history
                     })
-                    st.line_chart(df_score.set_index("시점"), color=["#FF9900", "#FF0000"]) # 오렌지는 점수, 레드는 기준선
                     
-                    if safe_score > 839:
-                        st.success(f"현재 점수 {safe_score}점: **정책자금 신청 가능권** (839점 초과)")
-                    else:
-                        st.warning(f"현재 점수 {safe_score}점: **정책자금 기준(839점) 집중 관리 필요**")
+                    # Altair를 이용한 정밀 차트 (고정 범위 0~999)
+                    score_chart = alt.Chart(df_score).mark_line(point=True, color='red').encode(
+                        x=alt.X('시점', sort=None),
+                        y=alt.Y('점수', scale=alt.Scale(domain=[0, 999])),
+                        tooltip=['시점', '점수']
+                    ).properties(height=300)
+                    
+                    # 839점 기준선 추가
+                    rule = alt.Chart(pd.DataFrame({'y': [839]})).mark_rule(strokeDash=[5, 5], color='black').encode(y='y')
+                    
+                    st.altair_chart(score_chart + rule, use_container_width=True)
+                    st.caption("※ 점선: 정책자금 권장 기준선 (839점)")
 
-                # [그래프 2] 월 매출액 우상향 트렌드
-                with chart_col2:
-                    st.write("**💰 월 매출 성장 추이**")
-                    # 우상향 트렌드 가상 데이터
-                    sales_history = [int(safe_sales * 0.7), int(safe_sales * 0.9), safe_sales]
+                # 2. 월 매출 성장 추이 (점과 선, 0~5억 고정)
+                with col2:
+                    st.subheader("💰 월 매출 성장 추이")
+                    sales_history = [int(safe_sales*0.6), int(safe_sales*0.85), safe_sales]
                     df_sales = pd.DataFrame({
                         "시점": ["과거", "직전", "현재"],
                         "매출(만원)": sales_history
                     })
-                    st.line_chart(df_sales.set_index("시점"), color="#0000FF") # 블루 계열
-                    st.write(f"현재 매출 수준: **상향 안정화 단계**")
+                    
+                    # Altair를 이용한 정밀 차트 (고정 범위 0~50,000)
+                    sales_chart = alt.Chart(df_sales).mark_line(point=True, color='blue').encode(
+                        x=alt.X('시점', sort=None),
+                        y=alt.Y('매출(만원)', scale=alt.Scale(domain=[0, 50000])),
+                        tooltip=['시점', '매출(만원)']
+                    ).properties(height=300)
+                    
+                    st.altair_chart(sales_chart, use_container_width=True)
+                    st.caption("※ 차트 범위: 0원 ~ 5억 원 (50,000만 원)")
 
                 st.divider()
-                
-                # 센터장 코멘트
-                st.subheader("💡 공민준 센터장의 맞춤형 경영 제언")
-                st.info(user_data.get('strategy_comment', "세부 전략을 수립 중입니다."))
+                st.subheader("💡 공민준 센터장의 핵심 경영 제언")
+                st.info(user_data.get('strategy_comment', "전략 수립 중입니다."))
                 
             else:
                 st.warning("아직 발행된 리포트가 없습니다.")
         except Exception as e:
-             st.warning(f"데이터 로드 중: {e}")
+             st.warning(f"데이터 연동 중 오류 발생: {e}")
