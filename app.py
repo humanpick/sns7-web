@@ -6,7 +6,7 @@ import pandas as pd
 # ==========================================
 # 1. 시스템 설정 및 Supabase 연결
 # ==========================================
-st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide")
+st.set_page_config(page_title="SNS7 CEO 경영관리 시스템", page_icon="💼", layout="wide")
 
 # [필수] 센터장님의 Supabase API 정보로 교체하세요!
 SUPABASE_URL = "https://pjpnaqyyzlkolnfvlpps.supabase.co"
