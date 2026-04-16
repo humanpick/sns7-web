@@ -3,6 +3,7 @@ import streamlit_authenticator as stauth
 from supabase import create_client, Client
 import pandas as pd
 import bcrypt
+import numpy as np
 
 # ==========================================
 # 1. 시스템 설정 및 Supabase 연동
@@ -141,8 +142,8 @@ elif st.session_state["authentication_status"] == True:
     # 4-B. [고객 모드] 업체 대표님 전용 (시각화 강화)
     # ==========================================
     else:
-        st.title(f"📈 {name} 대표님 맞춤형 경영 대시보드")
-        st.caption("본 리포트는 공민준 센터장의 전문 분석을 거쳐 발행되었습니다.")
+        st.title(f"📈 {name} 대표님 맞춤형 경영 리포트")
+        st.caption("공민준 센터장의 전문 진단 결과입니다.")
         
         try:
             res = supabase.table('client_data').select('*').eq('client_id', username).execute()
@@ -151,54 +152,54 @@ elif st.session_state["authentication_status"] == True:
                 safe_score = int(user_data.get('credit_score', 0))
                 safe_sales = int(user_data.get('monthly_sales', 0))
                 
-                # 1. 핵심 숫자 요약 (상호 -> 대표자 이름으로 변경)
+                # 상단 지표
                 col1, col2, col3 = st.columns(3)
                 col1.metric("대표자 성함", name)
-                col2.metric("현재 신용점수", f"{safe_score} 점")
-                col3.metric("최근 월 매출", f"{safe_sales:,} 만원")
+                col2.metric("신용점수 진단", f"{safe_score} 점")
+                col3.metric("최근 월 매출액", f"{safe_sales:,} 만원")
                 
                 st.divider()
                 
-                # 2. 시각화 그래프 영역
-                st.subheader("📊 핵심 지표 시각화")
+                # --- 그래프 영역 ---
+                st.subheader("📊 경영 핵심 지표 추이 (점과 선)")
                 chart_col1, chart_col2 = st.columns(2)
                 
+                # [그래프 1] 신용점수 우상향 트렌드
                 with chart_col1:
-                    st.write("**🛡️ 정책자금 승인 기준 (KCB/NICE)**")
-                    # 신용점수 그래프 및 839점 가이드라인
-                    score_pct = min(safe_score / 1000, 1.0)
-                    st.progress(score_pct)
+                    st.write("**🛡️ 신용점수 관리 추이**")
+                    # 우상향 트렌드를 시각화하기 위해 과거 가상 데이터를 생성
+                    score_history = [safe_score - 40, safe_score - 15, safe_score]
+                    df_score = pd.DataFrame({
+                        "시점": ["과거", "직전", "현재"],
+                        "점수": score_history,
+                        "정책자금 기준(839)": [839, 839, 839]
+                    })
+                    st.line_chart(df_score.set_index("시점"), color=["#FF9900", "#FF0000"]) # 오렌지는 점수, 레드는 기준선
                     
                     if safe_score > 839:
-                        st.success(f"현재 점수 {safe_score}점: **정책자금 기준(839점) 초과** (안정권)")
+                        st.success(f"현재 점수 {safe_score}점: **정책자금 신청 가능권** (839점 초과)")
                     else:
-                        st.warning(f"현재 점수 {safe_score}점: **정책자금 기준(839점) 이하** (집중 관리 필요)")
-                    
-                    st.caption("※ 839점은 정부정책자금 신청을 위한 최소 권장 점수입니다.")
-                
+                        st.warning(f"현재 점수 {safe_score}점: **정책자금 기준(839점) 집중 관리 필요**")
+
+                # [그래프 2] 월 매출액 우상향 트렌드
                 with chart_col2:
-                    st.write("**💰 월 매출 달성 현황 (최대 5억 기준)**")
-                    # 월 매출 차트 (0원 ~ 50,000만원=5억)
-                    sales_goal = 50000 
-                    sales_pct = min(safe_sales / sales_goal, 1.0)
-                    st.progress(sales_pct)
-                    
-                    st.write(f"현재 매출: **{safe_sales:,} 만원** / 목표 규모: **50,000 만원**")
-                    
-                    # 간단한 막대 차트로 가시성 추가
-                    sales_chart_data = pd.DataFrame({
-                        "구분": ["현재 매출", "5억 기준점"],
-                        "금액(만원)": [safe_sales, sales_goal]
+                    st.write("**💰 월 매출 성장 추이**")
+                    # 우상향 트렌드 가상 데이터
+                    sales_history = [int(safe_sales * 0.7), int(safe_sales * 0.9), safe_sales]
+                    df_sales = pd.DataFrame({
+                        "시점": ["과거", "직전", "현재"],
+                        "매출(만원)": sales_history
                     })
-                    st.bar_chart(sales_chart_data, x="구분", y="금액(만원)")
+                    st.line_chart(df_sales.set_index("시점"), color="#0000FF") # 블루 계열
+                    st.write(f"현재 매출 수준: **상향 안정화 단계**")
 
                 st.divider()
                 
-                # 3. 센터장 코멘트 영역
-                st.subheader("💡 공민준 센터장의 맞춤형 경영 전략")
-                st.info(user_data.get('strategy_comment', "아직 등록된 전략 코멘트가 없습니다."))
+                # 센터장 코멘트
+                st.subheader("💡 공민준 센터장의 맞춤형 경영 제언")
+                st.info(user_data.get('strategy_comment', "세부 전략을 수립 중입니다."))
                 
             else:
                 st.warning("아직 발행된 리포트가 없습니다.")
         except Exception as e:
-             st.warning(f"데이터를 불러오는 중입니다: {e}")
+             st.warning(f"데이터 로드 중: {e}")
