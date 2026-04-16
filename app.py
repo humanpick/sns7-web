@@ -10,20 +10,25 @@ import altair as alt
 # ==========================================
 st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide")
 
-# [CSS] 상단 공백 및 아이콘 제거
+# [핵심 방어] 크롬 자동 번역기 접근 금지 태그 및 디자인 정제 CSS
 st.markdown("""
+    <meta name="google" content="notranslate">
     <style>
+    /* 상단 여백 0으로 밀착 */
     .block-container { padding-top: 0rem !important; margin-top: -50px !important; }
     header { visibility: hidden; height: 0px; }
+    
+    /* 그래프 지분거리는 메뉴 아이콘 완전 박멸 */
     [data-testid="stElementActions"], .vega-actions { display: none !important; }
     </style>
 """, unsafe_allow_html=True)
 
+# [필수] 센터장님의 Supabase 정보를 입력하세요.
 SUPABASE_URL = "https://pjpnaqyyzlkolnfvlpps.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBqcG5hcXl5emxrb2xuZnZscHBzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxOTEwNzgsImV4cCI6MjA5MTc2NzA3OH0.Y1kR473B-XdxnZZG3akAsp6kvGxTIL1S8IG7is8mgMM"
 
 
-# 캐시 초기화 기능을 추가하여 로그인 시마다 깨끗한 데이터를 가져오도록 합니다.
+# 캐시를 사용하되 번역 충돌에 영향받지 않게 안정화
 @st.cache_resource(show_spinner=False)
 def init_connection():
     return create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -35,7 +40,7 @@ except Exception as e:
     st.stop()
 
 # ==========================================
-# 2. 데이터 처리 및 로그인
+# 2. 데이터베이스 통신 함수
 # ==========================================
 def fetch_users():
     try:
@@ -49,8 +54,11 @@ def fetch_users():
         return credentials
     except: return {'usernames': {}}
 
+# ==========================================
+# 3. 로그인 및 실명 동기화
+# ==========================================
 credentials = fetch_users()
-authenticator = stauth.Authenticate(credentials, 'ceo_portal_cookie', 'signature_key', cookie_expiry_days=0) # 쿠키 유지 0일로 설정하여 로그인시마다 갱신
+authenticator = stauth.Authenticate(credentials, 'ceo_portal_cookie', 'signature_key', cookie_expiry_days=0)
 authenticator.login('main')
 
 if st.session_state["authentication_status"] == True:
@@ -68,11 +76,11 @@ if st.session_state["authentication_status"] == True:
 
     if credentials['usernames'][username]['role'] == 'admin':
         st.title("👑 관리자 대시보드")
+        st.info("고객 데이터 관리 화면입니다.")
     else:
         st.title(f"📈 {real_name} 대표님 맞춤형 경영 리포트")
         
         try:
-            # 데이터 가져오기 (항상 최신순 정렬)
             res = supabase.table('client_data').select('*').eq('client_id', username).order('created_at').execute()
             
             if res.data:
@@ -80,7 +88,7 @@ if st.session_state["authentication_status"] == True:
                 df['created_at'] = pd.to_datetime(df.get('created_at', pd.Timestamp.now())).dt.tz_localize(None)
                 df['날짜'] = df['created_at'].dt.strftime('%Y-%m-%d')
                 
-                # 수치 데이터 강제 변환
+                # 수치 변환
                 df['점수'] = pd.to_numeric(df['credit_score'], errors='coerce').fillna(0).astype(int)
                 df['매출'] = pd.to_numeric(df['monthly_sales'], errors='coerce').fillna(0).astype(int)
 
@@ -88,44 +96,70 @@ if st.session_state["authentication_status"] == True:
                 safe_score, safe_sales = int(latest['점수']), int(latest['매출'])
                 
                 bg_color = "#87CEEB" if safe_score > 839 else "#FFCCCC"
-                st.markdown(f"""<div style="background-color:{bg_color}; padding:10px; border-radius:10px; border:2px solid #333; text-align:center;">
-                    <h3 style="color:black; margin:0;">현재 상태: {"기준 충족" if safe_score > 839 else "기준 미달"}</h3>
-                    <p style="color:black; margin:0;"><b>{real_name}</b> 대표님 최신 점수: {safe_score}점</p>
-                </div>""", unsafe_allow_html=True)
+                st.markdown(f"""
+                    <div style="background-color:{bg_color}; padding:10px; border-radius:10px; border:2px solid #333; text-align:center;">
+                        <h3 style="color:black; margin:0 0 5px 0;">현재 상태: {"정책자금 기준(839) 충족" if safe_score > 839 else "정책자금 기준(839) 미달"}</h3>
+                        <p style="color:black; font-size:16px; margin:0;">
+                            <b>{real_name}</b> 대표님의 최신 신용점수는 <b>{safe_score}점</b> 입니다.
+                        </p>
+                    </div>
+                """, unsafe_allow_html=True)
                 
                 st.divider()
-                st.columns(3)[0].metric("성함", real_name)
-                st.columns(3)[1].metric("신용점수", f"{safe_score} 점")
-                st.columns(3)[2].metric("월 매출액", f"{safe_sales:,} 만원")
+
+                m1, m2, m3 = st.columns(3)
+                m1.metric("성함", real_name)
+                m2.metric("최신 신용점수", f"{safe_score} 점")
+                m3.metric("최신 월 매출액", f"{safe_sales:,} 만원")
 
                 col1, col2 = st.columns(2)
-                x_ax = alt.X('날짜:N', title='입력일', axis=alt.Axis(labelAngle=0, labelColor='black'))
+                x_ax = alt.X('날짜:N', title='데이터 입력일', axis=alt.Axis(labelAngle=0, labelColor='black'))
 
                 with col1:
-                    st.subheader("🛡️ 신용점수 추이")
-                    # [핵심] nice=False, clamp=True를 사용하여 축 범위를 500~1000으로 강제 고정
+                    st.subheader("🛡️ 신용점수 분석 추이")
+                    # [유지] 500 ~ 1000 고정
                     base = alt.Chart(df).encode(
                         x=x_ax, 
                         y=alt.Y('점수:Q', scale=alt.Scale(domain=[500, 1000], nice=False, clamp=True), title='점수', axis=alt.Axis(labelColor='black'))
                     )
                     rule = alt.Chart(pd.DataFrame({'y': [839]})).mark_rule(strokeDash=[5,5], color='gray').encode(y='y:Q')
-                    chart1 = alt.layer(rule, base.mark_line(color='#ff4b4b'), base.mark_circle(size=100, color='#ff4b4b'), 
-                                       base.mark_text(dy=-20, fontWeight='bold').encode(text='점수:Q'))
-                    st.altair_chart(chart1.properties(height=350), use_container_width=True, theme=None)
+                    
+                    chart1 = alt.layer(
+                        rule, 
+                        base.mark_line(color='#ff4b4b', size=3), 
+                        base.mark_circle(size=150, color='#ff4b4b'), 
+                        base.mark_text(dy=-20, fontSize=15, fontWeight='bold', color='black').encode(text='점수:Q')
+                    ).properties(height=350)
+                    
+                    st.altair_chart(chart1, use_container_width=True, theme=None)
+                    st.caption("※ 회색 점선: 정책자금 권장 기준선 (839점)")
 
                 with col2:
-                    st.subheader("💰 월 매출 추이")
-                    # [핵심] 매출 축도 0~50000으로 절대 변하지 않게 고정
+                    st.subheader("💰 월 매출 성장 추이")
+                    # [유지] 0 ~ 50000 (5억) 고정 및 콤마 표기
                     base_s = alt.Chart(df).encode(
                         x=x_ax, 
                         y=alt.Y('매출:Q', scale=alt.Scale(domain=[0, 50000], nice=False, clamp=True), title='매출(만원)', 
                                 axis=alt.Axis(values=[0,10000,20000,30000,40000,50000], format=",", labelColor='black'))
                     )
-                    chart2 = alt.layer(base_s.mark_line(color='#0068c9'), base_s.mark_circle(size=100, color='#0068c9'),
-                                       base_s.mark_text(dy=-20, fontWeight='bold').encode(text=alt.Text('매출:Q', format=",")))
-                    st.altair_chart(chart2.properties(height=350), use_container_width=True, theme=None)
+                    
+                    chart2 = alt.layer(
+                        base_s.mark_line(color='#0068c9', size=3), 
+                        base_s.mark_circle(size=150, color='#0068c9'),
+                        base_s.mark_text(dy=-20, fontSize=15, fontWeight='bold', color='black').encode(text=alt.Text('매출:Q', format=","))
+                    ).properties(height=350)
+                    
+                    st.altair_chart(chart2, use_container_width=True, theme=None)
+                    st.caption("※ 차트 범위: 0원 ~ 5억 원 (50,000만 원)")
 
                 st.divider()
-                st.info(f"💡 센터장 제언: {latest.get('strategy_comment', '수립 중')}")
+                st.subheader("💡 공민준 센터장의 핵심 경영 제언")
+                st.info(latest.get('strategy_comment', "제언 수립 중입니다."))
+                
         except Exception as e:
-             st.error(f"데이터 오류: {e}")
+             st.error(f"시스템 오류: {e}")
+
+elif st.session_state["authentication_status"] == False:
+    st.error('아이디 또는 비밀번호를 확인해 주세요.')
+elif st.session_state["authentication_status"] == None:
+    st.info('로그인해 주세요.')
