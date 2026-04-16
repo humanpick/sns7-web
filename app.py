@@ -56,7 +56,7 @@ authenticator = stauth.Authenticate(
     cookie_expiry_days=30 
 )
 
-name, authentication_status, username = authenticator.login('CEO 포털 보안 로그인', 'main')
+name, authentication_status, username = authenticator.login('main')
 
 if authentication_status == False:
     st.error('아이디 또는 비밀번호가 일치하지 않습니다.')
