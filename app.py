@@ -10,7 +10,7 @@ st.set_page_config(page_title="SNS7 CEO 경영관리 시스템", page_icon="💼
 
 # [필수] 센터장님의 Supabase API 정보로 교체하세요!
 SUPABASE_URL = "https://pjpnaqyyzlkolnfvlpps.supabase.co"
-SUPABASE_KEY = "sb_publishable_T-AtFoqpZrgr86NkknpWBw_8i38viJV"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBqcG5hcXl5emxrb2xuZnZscHBzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxOTEwNzgsImV4cCI6MjA5MTc2NzA3OH0.Y1kR473B-XdxnZZG3akAsp6kvGxTIL1S8IG7is8mgMM"
 
 @st.cache_resource
 def init_connection():
