@@ -81,7 +81,7 @@ if st.session_state.get("authentication_status") == True:
                 df['점수'] = pd.to_numeric(df['credit_score'], errors='coerce').fillna(0).astype(int)
                 df['매출'] = pd.to_numeric(df['monthly_sales'], errors='coerce').fillna(0).astype(int)
 
-                # 💡 숫자가 사라지지 않도록 미리 문자로 강제 변환
+                # 숫자가 사라지지 않도록 미리 문자로 강제 변환
                 df['점수_텍스트'] = df['점수'].astype(str)
                 df['매출_텍스트'] = df['매출'].apply(lambda x: f"{x:,}")
 
@@ -110,9 +110,10 @@ if st.session_state.get("authentication_status") == True:
 
                 with col1:
                     st.subheader("🛡️ 신용점수 분석 추이")
+                    # 💡 [해결 1] zero=False를 다시 부활시켜 무조건 500점부터 시작하도록 강제!
                     base = alt.Chart(df).encode(
                         x=x_ax, 
-                        y=alt.Y('점수:Q', scale=alt.Scale(domain=[500, 1000], clamp=True), title='점수', axis=alt.Axis(labelColor='black'))
+                        y=alt.Y('점수:Q', scale=alt.Scale(domain=[500, 999], zero=False, clamp=True), title='점수', axis=alt.Axis(labelColor='black'))
                     )
                     rule = alt.Chart(pd.DataFrame({'y': [839]})).mark_rule(strokeDash=[5,5], color='gray').encode(y='y:Q')
                     
@@ -129,17 +130,16 @@ if st.session_state.get("authentication_status") == True:
                 with col2:
                     st.subheader("💰 월 매출 성장 추이")
                     
-                    # 💡 한글 축이 사라지지 않도록 가장 짧고 안전한 수학 공식 적용
-                    safe_label_expr = "datum.value == 0 ? '0원' : (datum.value >= 10000 ? (datum.value / 10000) + '억' : datum.value + '만원')"
+                    # 💡 [해결 2] 수식 계산 삭제! 100% 안전한 1:1 강제 매핑 구조로 변경
+                    safe_label_expr = "datum.value == 20000 ? '2억원' : datum.value == 10000 ? '1억원' : datum.value == 5000 ? '5천만원' : datum.value == 3000 ? '3천만원' : datum.value == 2000 ? '2천만원' : datum.value == 1000 ? '1천만원' : '0원'"
                     
                     base_s = alt.Chart(df).encode(
                         x=x_ax, 
-                        y=alt.Y('매출:Q', scale=alt.Scale(domain=[0, 50000], clamp=True), title='매출', 
+                        y=alt.Y('매출:Q', scale=alt.Scale(domain=[0, 20000], clamp=True), title='매출', 
                                 axis=alt.Axis(
-                                    values=[0, 1000, 2000, 3000, 5000, 10000, 20000, 30000, 50000], 
+                                    values=[0, 1000, 2000, 3000, 5000, 10000, 20000], 
                                     labelExpr=safe_label_expr, 
-                                    labelColor='black',
-                                    labelOverlap=False # 글자가 겹쳐도 무조건 강제 표기
+                                    labelColor='black'
                                 ))
                     )
                     
@@ -149,8 +149,8 @@ if st.session_state.get("authentication_status") == True:
                         base_s.mark_text(dy=-20, fontSize=15, fontWeight='bold', color='black', clip=False).encode(text='매출_텍스트:N')
                     ).properties(height=350)
                     
-                    # 💡 theme=None 으로 Streamlit의 덮어쓰기(깜빡임) 원천 차단
                     st.altair_chart(chart2, use_container_width=True, theme=None)
+                    st.caption("※ 차트 범위: 0원 ~ 2억 원")
 
                 st.divider()
                 st.subheader("💡 공민준 센터장의 핵심 경영 제언")
