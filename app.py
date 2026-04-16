@@ -13,7 +13,7 @@ st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide"
 NAVY = "#001F3F"
 GOLD = "#D4AF37"
 
-# 스타일 시트 (상단 에러 방지 및 디자인 통합)
+# 스타일 시트 (상단 에러 메시지 노출 방지 및 디자인 통합)
 style_code = f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;500;700&display=swap');
@@ -48,7 +48,7 @@ style_code = f"""
     header {{ visibility: hidden !important; height: 0px !important; }}
     [data-testid="stElementActions"], .vega-actions {{ display: none !important; }}
     
-    /* 메트릭 카드 디자인 */
+    /* 카드형 메트릭 디자인 */
     div[data-testid="metric-container"] {{
         background-color: white !important;
         border: 1px solid #E0E0E0 !important;
@@ -84,19 +84,19 @@ except Exception as e:
 def fetch_users():
     try:
         response = supabase.table('users').select('*').execute()
+        # stauth 표준 형식에 완벽하게 맞춘 딕셔너리 생성
         creds = {'usernames': {}}
         for user in response.data:
             creds['usernames'][user['username']] = {
-                'email': f"{user['username']}@ceo.com", 
                 'name': user['name'], 
                 'password': user['password'], 
-                'role': user['role']
+                'role': user.get('role', 'viewer')
             }
         return creds
     except: return {'usernames': {}}
 
+# 데이터를 먼저 가져오고 인증기 초기화
 credentials = fetch_users()
-# 세션 유지를 위한 인증 설정
 authenticator = stauth.Authenticate(credentials, 'ceo_portal_cookie', 'signature_key', cookie_expiry_days=30)
 
 # 로그인 화면
@@ -104,14 +104,15 @@ authenticator.login('main')
 
 if st.session_state.get("authentication_status"):
     username = st.session_state["username"]
-    # 💡 에러 방지를 위한 안전한 변수 추출
-    user_info = credentials['usernames'].get(username, {})
-    user_role = user_info.get('role', 'viewer')
-    real_name = user_info.get('name', username)
+    
+    # 💡 [핵심] credentials['usernames']를 통해 안전하게 접근합니다.
+    user_dict = credentials['usernames'].get(username, {})
+    user_role = user_dict.get('role', 'viewer')
+    real_name = user_dict.get('name', username)
     
     with st.sidebar:
         st.write(f"### 💼 CEO 전용 채널")
-        st.write(f"**{real_name}**님 환영합니다.")
+        st.write(f"**{real_name}**님 반갑습니다.")
         authenticator.logout('시스템 로그아웃', 'sidebar')
 
     # ------------------------------------------
@@ -144,7 +145,7 @@ if st.session_state.get("authentication_status"):
                         data = {"client_id": selected_client, "credit_score": new_score, 
                                 "monthly_sales": new_sales, "strategy_comment": new_strategy}
                         supabase.table('client_data').insert(data).execute()
-                        st.success(f"저장 성공! {credentials['usernames'][selected_client]['name']} 대표님 리포트가 업데이트되었습니다.")
+                        st.success(f"데이터가 저장되었습니다!")
                         st.rerun()
 
         # [Tab 2: 고객 등록 및 관리]
@@ -163,7 +164,7 @@ if st.session_state.get("authentication_status"):
                     else:
                         generated_id = f"kdj{reg_phone[-4:]}"
                         try:
-                            # 💡 Hasher 에러 해결: 최신 라이브러리 방식 적용
+                            # 💡 Hasher 에러 완전 박멸: 최신 라이브러리 방식
                             hashed_pw = stauth.Hasher.hash_passwords([str(reg_pw)])[0]
                             
                             new_user = {
@@ -191,6 +192,7 @@ if st.session_state.get("authentication_status"):
             all_res = supabase.table('client_data').select('*').order('created_at', desc=True).execute()
             if all_res.data:
                 all_df = pd.DataFrame(all_res.data)
+                # 안전한 매핑
                 all_df['고객명'] = all_df['client_id'].apply(lambda x: credentials['usernames'].get(x, {}).get('name', x))
                 st.dataframe(all_df[['created_at', '고객명', 'credit_score', 'monthly_sales', 'strategy_comment']], use_container_width=True)
 
@@ -230,7 +232,7 @@ if st.session_state.get("authentication_status"):
                 """, unsafe_allow_html=True)
 
                 m1, m2, m3 = st.columns(3)
-                m1.metric("성함", real_name) # 💡 여기서 credentials 접근 에러를 수정했습니다!
+                m1.metric("성함", real_name) 
                 m2.metric("최신 신용점수", f"{int(latest['점수'])} 점")
                 m3.metric("최신 월 매출액", f"{int(latest['매출']):,} 만원")
 
