@@ -6,19 +6,19 @@ import altair as alt
 import bcrypt
 
 # ==========================================
-# 1. 디자인 무결성 및 번역 방지 프로토콜 (CSS)
+# 1. 디자인 무결성 프로토콜 (번역 및 노출 방지)
 # ==========================================
 st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide")
 
-NAVY = "#001F3F"
-GOLD = "#D4AF37"
-BG_GRAY = "#F8F9FA"
-
-# 💡 [핵심 해결] 스타일 태그에 translate="no" 속성과 notranslate 클래스를 부여하여
-# 브라우저 번역기가 코드를 한글로 바꾸는 것을 물리적으로 차단합니다.
-st.markdown(f"""
-    <div class="notranslate" translate="no">
-    <style>
+# 💡 [핵심] 번역기가 코드를 한글로 바꾸는 것을 막기 위해 'notranslate' 클래스를 강제 주입합니다.
+def inject_custom_css():
+    NAVY = "#001F3F"
+    GOLD = "#D4AF37"
+    BG_GRAY = "#F8F9FA"
+    
+    # f-string 내부의 중괄호를 {{ }}로 이중 처리하여 파이썬과의 충돌을 막았습니다.
+    css_code = f"""
+    <style class="notranslate">
     @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;700&display=swap');
     
     html, body, [class*="css"] {{ 
@@ -59,11 +59,14 @@ st.markdown(f"""
     /* 불필요한 마진 제거 */
     [data-testid="stMarkdownContainer"] p {{ margin-bottom: 0px; }}
     </style>
-    </div>
-""", unsafe_allow_html=True)
+    """
+    st.markdown(f'<div class="notranslate" translate="no">{css_code}</div>', unsafe_allow_html=True)
+
+# 실행 시 즉시 CSS 주입
+inject_custom_css()
 
 # ------------------------------------------
-# [필수] Supabase 연결 정보 (민준 님의 정보를 입력하세요)
+# [필수] Supabase 연결 정보
 # ------------------------------------------
 SUPABASE_URL = "https://pjpnaqyyzlkolnfvlpps.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBqcG5hcXl5emxrb2xuZnZscHBzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxOTEwNzgsImV4cCI6MjA5MTc2NzA3OH0.Y1kR473B-XdxnZZG3akAsp6kvGxTIL1S8IG7is8mgMM"
@@ -80,7 +83,7 @@ except Exception as e:
     st.stop()
 
 # ==========================================
-# 2. 데이터 및 인증 로직
+# 2. 데이터베이스 및 인증 로직
 # ==========================================
 def fetch_users():
     try:
@@ -115,6 +118,9 @@ if st.session_state.get("authentication_status"):
         st.write(f"**{real_name}**님 반갑습니다.")
         authenticator.logout('시스템 로그아웃', 'sidebar')
 
+    # ------------------------------------------
+    # 👑 [ADMIN] 관리자 대시보드
+    # ------------------------------------------
     if user_role == 'admin':
         st.title("👑 관리자 데이터 센터")
         tab1, tab2, tab3 = st.tabs(["📝 리포트 발행", "👥 고객 관리", "📜 발행 이력"])
@@ -145,9 +151,13 @@ if st.session_state.get("authentication_status"):
                 r_name = st.text_input("이름")
                 if st.form_submit_button("고객 등록"):
                     hpw = bcrypt.hashpw(r_pw.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-                    supabase.table.insert({"username": r_id, "name": r_name, "password": hpw, "role": "viewer"}).execute()
+                    supabase.table('users').insert({"username": r_id, "name": r_name, "password": hpw, "role": "viewer"}).execute()
                     st.success("등록 완료")
                     st.rerun()
+
+    # ------------------------------------------
+    # 📈 [VIEWER] 프리미엄 경영 리포트
+    # ------------------------------------------
     else:
         try:
             res = supabase.table('client_data').select('*').eq('client_id', username).order('created_at').execute()
@@ -159,9 +169,9 @@ if st.session_state.get("authentication_status"):
                 latest = df.iloc[-1]
 
                 st.markdown(f"""
-                    <div class="notranslate" translate="no" style="border-bottom: 2px solid {GOLD}; padding-bottom: 10px; margin-bottom: 30px;">
-                        <span style="color: {NAVY}; font-size: 1.1rem; font-weight: 300;">SNS7 BUSINESS ANALYTICS</span>
-                        <h1 style="color: {NAVY}; margin-top: 5px; font-weight: 700;">{real_name} 대표님 맞춤형 경영 리포트</h1>
+                    <div class="notranslate" translate="no" style="border-bottom: 2px solid #D4AF37; padding-bottom: 10px; margin-bottom: 30px;">
+                        <span style="color: #001F3F; font-size: 1.1rem; font-weight: 300;">SNS7 BUSINESS ANALYTICS</span>
+                        <h1 style="color: #001F3F; margin-top: 5px; font-weight: 700;">{real_name} 대표님 맞춤형 경영 리포트</h1>
                     </div>
                 """, unsafe_allow_html=True)
 
@@ -175,22 +185,20 @@ if st.session_state.get("authentication_status"):
 
                 g_col1, g_col2 = st.columns(2)
                 with g_col1:
-                    st.markdown('<p style="font-weight:700; color:#444;">🛡️ 신용 분석 추이</p>', unsafe_allow_html=True)
                     line = alt.Chart(df).mark_line(color='#E74C3C', strokeWidth=4, interpolate='monotone').encode(
                         x=alt.X('날짜:N', title=None), y=alt.Y('점수:Q', scale=alt.Scale(domain=[500, 1000]), title=None)
                     )
                     st.altair_chart((line + line.mark_circle(size=120, color='#E74C3C')).properties(height=300), use_container_width=True)
 
                 with g_col2:
-                    st.markdown('<p style="font-weight:700; color:#444;">💰 매출 성장 곡선 (억 단위)</p>', unsafe_allow_html=True)
                     area = alt.Chart(df).mark_area(line={'color': '#3498DB', 'width': 4}, color=alt.Gradient(gradient='linear', stops=[alt.GradientStop(color='#3498DB', offset=0), alt.GradientStop(color='white', offset=1)], x1=1, x2=1, y1=1, y2=0)).encode(
                         x=alt.X('날짜:N', title=None), y=alt.Y('매출_억:Q', scale=alt.Scale(domain=[0, 2]), title=None)
                     ).properties(height=300)
                     st.altair_chart(area, use_container_width=True)
 
                 st.markdown(f"""
-                    <div class="notranslate" translate="no" style="background-color: {NAVY}; color: white; padding: 2.5rem; border-radius: 15px; margin-top: 2rem;">
-                        <h3 style="color: {GOLD}; margin-bottom: 1rem;">💡 공민준 센터장의 경영 전략 제언</h3>
+                    <div class="notranslate" translate="no" style="background-color: #001F3F; color: white; padding: 2.5rem; border-radius: 15px; margin-top: 2rem;">
+                        <h3 style="color: #D4AF37; margin-bottom: 1rem;">💡 공민준 센터장의 경영 전략 제언</h3>
                         <p style="font-size: 1.15rem; line-height: 1.9; opacity: 0.95; white-space: pre-wrap;">{latest['strategy_comment']}</p>
                     </div>
                 """, unsafe_allow_html=True)
