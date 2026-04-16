@@ -43,19 +43,6 @@ def update_password_in_db(username, hashed_password):
     supabase.table('users').update({'password': hashed_password}).eq('username', username).execute()
 
 # ==========================================
-# 🛠️ [해결 2] 비밀번호 강제 동기화 마스터 버튼
-# ==========================================
-if st.button("🚨 [여기를 클릭하세요] 관리자 비밀번호 '1234'로 서버 맞춤 동기화"):
-    import bcrypt  # 파이썬 순정 암호화 엔진 호출
-    
-    # 1234를 서버에 완벽하게 맞는 해시 암호로 직접 변환
-    new_hash = bcrypt.hashpw('1234'.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-    update_password_in_db('admin_gong', new_hash)
-    
-    st.success("✅ 서버 맞춤형 암호화가 Supabase에 적용되었습니다! 이제 키보드의 F5(새로고침)를 누르고 로그인해 보세요.")
-    st.stop()
-
-# ==========================================
 # 3. 로그인 및 인증 시스템
 # ==========================================
 credentials = fetch_users()
