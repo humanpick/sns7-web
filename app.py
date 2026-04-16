@@ -39,7 +39,7 @@ style_code = f"""
 st.markdown(style_code, unsafe_allow_html=True)
 
 # ------------------------------------------
-# [필수] Supabase 연결 정보
+# [필수] Supabase 연결 정보 (Key를 꼭 확인하세요!)
 # ------------------------------------------
 SUPABASE_URL = "https://pjpnaqyyzlkolnfvlpps.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBqcG5hcXl5emxrb2xuZnZscHBzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxOTEwNzgsImV4cCI6MjA5MTc2NzA3OH0.Y1kR473B-XdxnZZG3akAsp6kvGxTIL1S8IG7is8mgMM"
@@ -97,6 +97,7 @@ if st.session_state.get("authentication_status"):
         st.title("👑 관리자 데이터 센터")
         tab1, tab2, tab3 = st.tabs(["📝 데이터 입력", "👥 고객 등록 및 관리", "📜 전체 리포트 이력"])
         
+        # [Tab 1: 데이터 입력]
         with tab1:
             st.subheader("리포트 수치 입력")
             viewer_list = [u for u in all_users if all_users[u].get('role') != 'admin']
@@ -105,48 +106,57 @@ if st.session_state.get("authentication_status"):
             else:
                 selected_client = st.selectbox("대상을 선택하세요", viewer_list, 
                                                format_func=lambda x: f"{all_users[x].get('name')} ({x})")
+                
                 with st.form("data_input_form", clear_on_submit=True):
+                    # 💡 [업데이트] DB 스키마에 맞춰 '업체명' 필드를 추가했습니다.
+                    new_company = st.text_input("업체명 (예: SNS7 컨설팅)")
                     col1, col2 = st.columns(2)
                     with col1:
                         new_score = st.number_input("신용점수", min_value=500, max_value=999, value=850)
                     with col2:
-                        new_sales = st.number_input("월 매출액 (만원)", min_value=0, value=1500)
+                        new_sales = st.number_input("월 매출액 (단위: 만원)", min_value=0, value=1500)
                     new_strategy = st.text_area("공민준 센터장의 전략 제언")
+                    
                     if st.form_submit_button("데이터 저장"):
-                        supabase.table('client_data').insert({
-                            "client_id": selected_client, "credit_score": new_score, 
-                            "monthly_sales": new_sales, "strategy_comment": new_strategy
-                        }).execute()
-                        st.success("저장되었습니다!")
-                        st.rerun()
+                        if not new_company:
+                            st.warning("업체명을 입력해야 데이터가 저장됩니다.")
+                        else:
+                            try:
+                                # 💡 [해결] DB의 company_name 컬럼까지 모두 포함하여 전송합니다.
+                                supabase.table('client_data').insert({
+                                    "client_id": selected_client,
+                                    "company_name": new_company,
+                                    "credit_score": str(new_score),
+                                    "monthly_sales": str(new_sales),
+                                    "strategy_comment": new_strategy
+                                }).execute()
+                                st.success(f"{all_users[selected_client]['name']} 대표님의 데이터가 성공적으로 저장되었습니다!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"저장 실패: {e}")
 
+        # [Tab 2: 고객 등록 및 관리]
         with tab2:
             st.subheader("신규 고객 계정 생성")
             with st.form("user_reg_form"):
                 reg_id = st.text_input("1. ID (로그인용)")
                 reg_pw = st.text_input("2. 비밀번호 설정", type="password")
                 reg_name = st.text_input("3. 고객 성함")
-                reg_phone = st.text_input("4. 휴대폰 번호 (숫자만)")
+                reg_phone = st.text_input("4. 휴대폰 번호 (기록용)")
                 
                 if st.form_submit_button("고객 정보 저장 및 등록"):
                     if not reg_id or not reg_pw or not reg_name:
-                        st.warning("필수 항목(ID, 비번, 성함)을 모두 입력해 주세요.")
+                        st.warning("필수 항목을 모두 입력해 주세요.")
                     elif reg_id in all_users:
                         st.error("이미 존재하는 ID입니다.")
                     else:
                         try:
-                            # 💡 bcrypt 직접 암호화 (Hasher 에러 완전 방어)
                             hashed_pw = bcrypt.hashpw(reg_pw.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-                            
-                            # 💡 [핵심 해결] DB 스키마에 없는 phone 컬럼을 제외하고 저장합니다.
                             supabase.table('users').insert({
-                                "username": reg_id, 
-                                "name": reg_name, 
-                                "password": hashed_pw, 
-                                "role": "viewer"
+                                "username": reg_id, "name": reg_name, 
+                                "password": hashed_pw, "role": "viewer"
                             }).execute()
-                            
-                            st.success(f"✅ {reg_name} 대표님 등록 완료! (휴대폰 번호 기록용: {reg_phone})")
+                            st.success(f"✅ {reg_name} 대표님 등록 완료!")
                             st.rerun()
                         except Exception as e:
                             st.error(f"등록 실패: {e}")
@@ -156,13 +166,14 @@ if st.session_state.get("authentication_status"):
             cl_display = [{"ID": k, "이름": v.get('name')} for k, v in all_users.items() if v.get('role') != 'admin']
             if cl_display: st.table(pd.DataFrame(cl_display))
 
+        # [Tab 3: 전체 리포트 이력]
         with tab3:
             st.subheader("전체 발행 기록")
             all_res = supabase.table('client_data').select('*').order('created_at', desc=True).execute()
             if all_res.data:
                 all_df = pd.DataFrame(all_res.data)
                 all_df['고객명'] = all_df['client_id'].apply(lambda x: all_users.get(x, {}).get('name', x))
-                st.dataframe(all_df[['created_at', '고객명', 'credit_score', 'monthly_sales']], use_container_width=True)
+                st.dataframe(all_df[['created_at', '고객명', 'company_name', 'credit_score', 'monthly_sales']], use_container_width=True)
 
     # ------------------------------------------
     # 📈 [VIEWER] 고객 리포트 화면
@@ -183,7 +194,8 @@ if st.session_state.get("authentication_status"):
                     <div style="background: linear-gradient(135deg, {NAVY} 0%, #003366 100%); 
                                 padding: 30px; border-radius: 15px; border-left: 10px solid {GOLD}; 
                                 color: white; text-align: center; margin-bottom: 25px;">
-                        <h1 style="color: {GOLD}; margin-bottom: 10px;">📈 {real_name} 대표님 리포트</h1>
+                        <h1 style="color: {GOLD}; margin-bottom: 5px;">📈 {real_name} 대표님 리포트</h1>
+                        <p style="font-size: 1.2rem; opacity: 0.9; margin-bottom: 10px;">{latest['company_name']}</p>
                         <p style="font-size: 18px; margin: 0;">현재 경영 상태: 
                             <span style="font-weight: 700; color: {'#58D68D' if int(latest['점수']) > 839 else '#F1948A'};">
                                 {"정책자금 승인 권장" if int(latest['점수']) > 839 else "신용 관리 필요"}
@@ -193,7 +205,7 @@ if st.session_state.get("authentication_status"):
                 """, unsafe_allow_html=True)
 
                 m1, m2, m3 = st.columns(3)
-                m1.metric("성함", real_name)
+                m1.metric("업체명", latest['company_name'])
                 m2.metric("최신 신용점수", f"{int(latest['점수'])} 점")
                 m3.metric("최신 월 매출액", f"{int(latest['매출']):,} 만원")
 
