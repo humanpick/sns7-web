@@ -3,26 +3,19 @@ import streamlit_authenticator as stauth
 from supabase import create_client, Client
 import pandas as pd
 import bcrypt
-
-# 💡 [핵심] 완벽한 그래프를 위해 Plotly 엔진을 사용합니다.
-# 만약 에러가 난다면 터미널에 `pip install plotly` 를 딱 한 번만 쳐주세요!
-try:
-    import plotly.graph_objects as go
-except ImportError:
-    st.error("🚨 그래프 엔진(Plotly)이 설치되어 있지 않습니다. 터미널(명령 프롬프트)에 아래 명령어를 입력해주세요!\n\n`pip install plotly`")
-    st.stop()
+import altair as alt
 
 # ==========================================
 # 1. 시스템 설정 및 Supabase 연동
 # ==========================================
 st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide")
 
-# [마스터 CSS] 상단 공백 극한 축소 (Plotly는 툴바가 자체적으로 숨겨지므로 CSS가 가볍습니다)
 st.markdown("""
     <meta name="google" content="notranslate">
     <style>
     .block-container { padding-top: 0rem !important; margin-top: -50px !important; }
     header { visibility: hidden; height: 0px; }
+    [data-testid="stElementActions"], .vega-actions { display: none !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -83,12 +76,12 @@ if st.session_state.get("authentication_status") == True:
             if res.data:
                 df = pd.DataFrame(res.data)
                 df['created_at'] = pd.to_datetime(df.get('created_at', pd.Timestamp.now())).dt.tz_localize(None)
-                df['date_label'] = df['created_at'].dt.strftime('%Y-%m-%d')
+                df['날짜'] = df['created_at'].dt.strftime('%Y-%m-%d')
                 
                 df['점수'] = pd.to_numeric(df['credit_score'], errors='coerce').fillna(0).astype(int)
                 df['매출'] = pd.to_numeric(df['monthly_sales'], errors='coerce').fillna(0).astype(int)
 
-                # 숫자 포맷팅을 미리 생성 (Plotly 적용용)
+                # 💡 숫자가 사라지지 않도록 미리 문자로 강제 변환
                 df['점수_텍스트'] = df['점수'].astype(str)
                 df['매출_텍스트'] = df['매출'].apply(lambda x: f"{x:,}")
 
@@ -113,80 +106,51 @@ if st.session_state.get("authentication_status") == True:
                 m3.metric("최신 월 매출액", f"{safe_sales:,} 만원")
 
                 col1, col2 = st.columns(2)
+                x_ax = alt.X('날짜:N', title='데이터 입력일', axis=alt.Axis(labelAngle=0, labelColor='black'))
 
-                # ==========================================
-                # 📊 [왼쪽] 신용점수 분석 추이 (Plotly)
-                # ==========================================
                 with col1:
                     st.subheader("🛡️ 신용점수 분석 추이")
-                    fig1 = go.Figure()
-                    
-                    # 꺾은선 및 점, 숫자 강제 표기 (절대 사라지지 않음)
-                    fig1.add_trace(go.Scatter(
-                        x=df['date_label'], y=df['점수'],
-                        mode='lines+markers+text',
-                        text=df['점수_텍스트'],
-                        textposition='top center', # 점 위에 선명하게 배치
-                        line=dict(color='#ff4b4b', width=3),
-                        marker=dict(size=12, color='#ff4b4b'),
-                        textfont=dict(size=16, color='black')
-                    ))
-                    
-                    # 정책자금 기준선 (839점)
-                    fig1.add_hline(y=839, line_dash="dash", line_color="gray")
-                    
-                    # 레이아웃 강제 고정 (500~999점)
-                    fig1.update_layout(
-                        yaxis=dict(range=[500, 999], title='점수', tickfont=dict(color='black')),
-                        xaxis=dict(title='데이터 입력일', tickfont=dict(color='black')),
-                        height=350,
-                        margin=dict(l=20, r=20, t=30, b=20),
-                        plot_bgcolor='white', paper_bgcolor='white'
+                    base = alt.Chart(df).encode(
+                        x=x_ax, 
+                        y=alt.Y('점수:Q', scale=alt.Scale(domain=[500, 1000], clamp=True), title='점수', axis=alt.Axis(labelColor='black'))
                     )
-                    fig1.update_yaxes(showgrid=True, gridwidth=1, gridcolor='#E5E5E5')
-                    fig1.update_xaxes(showgrid=False)
+                    rule = alt.Chart(pd.DataFrame({'y': [839]})).mark_rule(strokeDash=[5,5], color='gray').encode(y='y:Q')
                     
-                    # config={'displayModeBar': False} 를 통해 우측 상단 툴바를 영구 박멸
-                    st.plotly_chart(fig1, use_container_width=True, config={'displayModeBar': False})
+                    chart1 = alt.layer(
+                        rule, 
+                        base.mark_line(color='#ff4b4b', size=3), 
+                        base.mark_circle(size=150, color='#ff4b4b'), 
+                        base.mark_text(dy=-20, fontSize=15, fontWeight='bold', color='black', clip=False).encode(text='점수_텍스트:N')
+                    ).properties(height=350)
+                    
+                    st.altair_chart(chart1, use_container_width=True, theme=None)
                     st.caption("※ 회색 점선: 정책자금 권장 기준선 (839점)")
 
-                # ==========================================
-                # 📊 [오른쪽] 월 매출 성장 추이 (Plotly)
-                # ==========================================
                 with col2:
                     st.subheader("💰 월 매출 성장 추이")
-                    fig2 = go.Figure()
                     
-                    fig2.add_trace(go.Scatter(
-                        x=df['date_label'], y=df['매출'],
-                        mode='lines+markers+text',
-                        text=df['매출_텍스트'],
-                        textposition='top center',
-                        line=dict(color='#0068c9', width=3),
-                        marker=dict(size=12, color='#0068c9'),
-                        textfont=dict(size=16, color='black')
-                    ))
+                    # 💡 한글 축이 사라지지 않도록 가장 짧고 안전한 수학 공식 적용
+                    safe_label_expr = "datum.value == 0 ? '0원' : (datum.value >= 10000 ? (datum.value / 10000) + '억' : datum.value + '만원')"
                     
-                    # 레이아웃 강제 고정 및 텍스트 매핑 (0원 ~ 2억)
-                    fig2.update_layout(
-                        yaxis=dict(
-                            range=[0, 20000],
-                            title='매출(단위: 만원)',
-                            # 💡 요청하신 금액을 강제로 축에 때려 박습니다. 에러 없음 보장!
-                            tickvals=[0, 1000, 2000, 3000, 5000, 10000, 20000],
-                            ticktext=['0원', '1천만원', '2천만원', '3천만원', '5천만원', '1억원', '2억원'],
-                            tickfont=dict(color='black')
-                        ),
-                        xaxis=dict(title='데이터 입력일', tickfont=dict(color='black')),
-                        height=350,
-                        margin=dict(l=20, r=20, t=30, b=20),
-                        plot_bgcolor='white', paper_bgcolor='white'
+                    base_s = alt.Chart(df).encode(
+                        x=x_ax, 
+                        y=alt.Y('매출:Q', scale=alt.Scale(domain=[0, 50000], clamp=True), title='매출', 
+                                axis=alt.Axis(
+                                    values=[0, 1000, 2000, 3000, 5000, 10000, 20000, 30000, 50000], 
+                                    labelExpr=safe_label_expr, 
+                                    labelColor='black',
+                                    labelOverlap=False # 글자가 겹쳐도 무조건 강제 표기
+                                ))
                     )
-                    fig2.update_yaxes(showgrid=True, gridwidth=1, gridcolor='#E5E5E5')
-                    fig2.update_xaxes(showgrid=False)
                     
-                    st.plotly_chart(fig2, use_container_width=True, config={'displayModeBar': False})
-                    st.caption("※ 차트 범위: 0원 ~ 2억 원")
+                    chart2 = alt.layer(
+                        base_s.mark_line(color='#0068c9', size=3), 
+                        base_s.mark_circle(size=150, color='#0068c9'),
+                        base_s.mark_text(dy=-20, fontSize=15, fontWeight='bold', color='black', clip=False).encode(text='매출_텍스트:N')
+                    ).properties(height=350)
+                    
+                    # 💡 theme=None 으로 Streamlit의 덮어쓰기(깜빡임) 원천 차단
+                    st.altair_chart(chart2, use_container_width=True, theme=None)
 
                 st.divider()
                 st.subheader("💡 공민준 센터장의 핵심 경영 제언")
