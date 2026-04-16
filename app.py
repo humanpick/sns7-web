@@ -131,7 +131,7 @@ elif st.session_state["authentication_status"] == True:
                         st.error(f"저장 실패: {e}")
 
     # ==========================================
-    # 4-B. [고객 모드] 업체 대표님 전용 (레이어 완전 분리 적용)
+    # 4-B. [고객 모드] 업체 대표님 전용 (데이터 1개 버그 완벽 해결)
     # ==========================================
     else:
         st.title(f"📈 {name} 대표님 맞춤형 경영 리포트")
@@ -144,16 +144,26 @@ elif st.session_state["authentication_status"] == True:
                 if 'created_at' not in df.columns:
                     df['created_at'] = '2026-01-01T00:00:00'
                 
+                df['created_at'] = pd.to_datetime(df['created_at']).dt.tz_localize(None)
                 df = df.sort_values('created_at')
-                df['입력일시'] = df['created_at'].astype(str).str[:10] # 날짜만 추출
+
+                # 💡 [핵심 해결] 데이터가 1개뿐이면, 엔진이 고장 나지 않도록 하루 전 날짜로 가상의 점을 만듭니다.
+                if len(df) == 1:
+                    dummy_row = df.iloc[[0]].copy()
+                    dummy_row['created_at'] = dummy_row['created_at'] - pd.Timedelta(days=1)
+                    df = pd.concat([dummy_row, df], ignore_index=True)
+                
+                # 차트용 X축 라벨 생성 (구분을 위해 연-월-일 시:분 까지 표시)
+                df['차트라벨'] = df['created_at'].dt.strftime('%y-%m-%d %H:%M')
                 
                 df['신용점수'] = pd.to_numeric(df['credit_score'], errors='coerce').fillna(0).astype(int)
                 df['매출(만원)'] = pd.to_numeric(df['monthly_sales'], errors='coerce').fillna(0).astype(int)
                 
-                # 강제 텍스트 변환 (절대 사라지지 않도록)
+                # 강제 텍스트 변환
                 df['점수표기'] = df['신용점수'].astype(str)
                 df['매출표기'] = df['매출(만원)'].apply(lambda x: f"{x:,}")
                 
+                # 최신 데이터는 무조건 맨 마지막 행(실제 데이터)
                 latest_data = df.iloc[-1]
                 safe_score = int(latest_data['신용점수'])
                 safe_sales = int(latest_data['매출(만원)'])
@@ -177,64 +187,41 @@ elif st.session_state["authentication_status"] == True:
                 m2.metric("최신 신용점수", f"{safe_score} 점")
                 m3.metric("최신 월 매출액", f"{safe_sales:,} 만원")
 
-                # --- 그래프 섹션 (절대 불변 레이어 방식 적용) ---
+                # --- 그래프 섹션 ---
                 col1, col2 = st.columns(2)
                 
                 with col1:
                     st.subheader("🛡️ 신용점수 분석 추이")
                     
-                    # 1. 839점 기준선 레이어
-                    rule_score = alt.Chart(pd.DataFrame({'y': [839]})).mark_rule(strokeDash=[5, 5], color='gray').encode(y='y:Q')
-                    
-                    # 2. 선 레이어
-                    line_score = alt.Chart(df).mark_line(color='#ff4b4b', size=3).encode(
-                        x=alt.X('입력일시:O', title='데이터 입력 날짜', axis=alt.Axis(labelAngle=0)),
+                    base_score = alt.Chart(df).encode(
+                        x=alt.X('차트라벨:O', title='데이터 입력 시간', axis=alt.Axis(labelAngle=-45)),
                         y=alt.Y('신용점수:Q', scale=alt.Scale(domain=[0, 999]), title='신용점수 (0~999점)', axis=alt.Axis(values=[0, 200, 400, 600, 800, 999]))
                     )
                     
-                    # 3. 굵은 점 레이어
-                    point_score = alt.Chart(df).mark_circle(color='#ff4b4b', size=150).encode(
-                        x=alt.X('입력일시:O'),
-                        y=alt.Y('신용점수:Q')
-                    )
+                    rule_score = alt.Chart(pd.DataFrame({'y': [839]})).mark_rule(strokeDash=[5, 5], color='gray').encode(y='y:Q')
+                    line_score = base_score.mark_line(color='#ff4b4b', size=3)
+                    point_score = base_score.mark_circle(color='#ff4b4b', size=150)
+                    text_score = base_score.mark_text(dy=-20, fontSize=15, fontWeight='bold', color='black').encode(text=alt.Text('점수표기:N'))
                     
-                    # 4. 글자 레이어 (절대 증발 안 함)
-                    text_score = alt.Chart(df).mark_text(dy=-20, fontSize=15, fontWeight='bold', color='black').encode(
-                        x=alt.X('입력일시:O'),
-                        y=alt.Y('신용점수:Q'),
-                        text=alt.Text('점수표기:N')
-                    )
-                    
-                    # 레이어 압축 후 테마 무시 (theme=None)
-                    final_score_chart = alt.layer(rule_score, line_score, point_score, text_score).properties(height=350)
-                    st.altair_chart(final_score_chart, use_container_width=True, theme=None)
+                    # 테마 충돌을 막기 위해 theme=None 삭제 (Streamlit 기본 테마 사용)
+                    final_score = alt.layer(rule_score, line_score, point_score, text_score).properties(height=350)
+                    st.altair_chart(final_score, use_container_width=True)
                     st.caption("※ 회색 점선: 정책자금 권장 기준선 (839점)")
 
                 with col2:
                     st.subheader("💰 월 매출 성장 추이")
                     
-                    # 1. 선 레이어 (Y축 강제 콤마 포맷팅)
-                    line_sales = alt.Chart(df).mark_line(color='#0068c9', size=3).encode(
-                        x=alt.X('입력일시:O', title='데이터 입력 날짜', axis=alt.Axis(labelAngle=0)),
+                    base_sales = alt.Chart(df).encode(
+                        x=alt.X('차트라벨:O', title='데이터 입력 시간', axis=alt.Axis(labelAngle=-45)),
                         y=alt.Y('매출(만원):Q', scale=alt.Scale(domain=[0, 50000]), title='월 매출액 (만원)', axis=alt.Axis(values=[0, 10000, 20000, 30000, 40000, 50000], format=','))
                     )
                     
-                    # 2. 굵은 점 레이어
-                    point_sales = alt.Chart(df).mark_circle(color='#0068c9', size=150).encode(
-                        x=alt.X('입력일시:O'),
-                        y=alt.Y('매출(만원):Q')
-                    )
+                    line_sales = base_sales.mark_line(color='#0068c9', size=3)
+                    point_sales = base_sales.mark_circle(color='#0068c9', size=150)
+                    text_sales = base_sales.mark_text(dy=-20, fontSize=15, fontWeight='bold', color='black').encode(text=alt.Text('매출표기:N'))
                     
-                    # 3. 콤마가 찍힌 글자 레이어 (절대 증발 안 함)
-                    text_sales = alt.Chart(df).mark_text(dy=-20, fontSize=15, fontWeight='bold', color='black').encode(
-                        x=alt.X('입력일시:O'),
-                        y=alt.Y('매출(만원):Q'),
-                        text=alt.Text('매출표기:N')
-                    )
-                    
-                    # 레이어 압축 후 테마 무시 (theme=None)
-                    final_sales_chart = alt.layer(line_sales, point_sales, text_sales).properties(height=350)
-                    st.altair_chart(final_sales_chart, use_container_width=True, theme=None)
+                    final_sales = alt.layer(line_sales, point_sales, text_sales).properties(height=350)
+                    st.altair_chart(final_sales, use_container_width=True)
                     st.caption("※ 차트 범위: 0원 ~ 5억 원 (50,000만 원)")
 
                 st.divider()
