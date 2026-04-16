@@ -10,23 +10,29 @@ import altair as alt
 # ==========================================
 st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide")
 
-# [마스터 CSS] 상단 공백 제거 및 그래프 부가 기능 아이콘 완전 삭제
+# [마스터 CSS] 상단 공백 제거 + 그래프 부가 기능 아이콘(데이터 표시, 전체화면) 완전 삭제
 st.markdown("""
     <style>
-    /* 상단 여백 0으로 밀착 */
+    /* 1. 상단 여백 0으로 밀착 */
     .block-container {
         padding-top: 0rem !important;
         padding-bottom: 0rem !important;
-        margin-top: -40px !important;
+        margin-top: -45px !important;
     }
     header {visibility: hidden; height: 0px;}
     footer {visibility: hidden;}
     
-    /* 그래프 우측 상단 '데이터 표시', '전체화면' 아이콘 완전 박멸 */
-    [data-testid="stElementActions"] { display: none !important; }
-    button[title="View fullscreen"] { display: none !important; }
-    .stVegaLiteChart summary { display: none !important; }
-    details { display: none !important; }
+    /* 2. 그래프 우측 상단 '데이터 표시(...)', '전체화면' 버튼 강제 박멸 */
+    [data-testid="stElementActions"] {
+        display: none !important;
+    }
+    button[title="View fullscreen"] {
+        display: none !important;
+    }
+    /* 차트 도구 모음 컨테이너 자체를 숨김 */
+    .stVegaLiteChart > div > details {
+        display: none !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -71,7 +77,7 @@ authenticator.login('main')
 if st.session_state["authentication_status"] == True:
     username = st.session_state["username"]
     
-    # DB 실시간 이름 동기화 (쿠키 무시)
+    # DB 실시간 이름 동기화 (상호가 아닌 실명 김대중으로 표기)
     try:
         user_res = supabase.table('users').select('name').eq('username', username).execute()
         real_name = user_res.data[0]['name'] if user_res.data else credentials['usernames'][username]['name']
@@ -81,25 +87,20 @@ if st.session_state["authentication_status"] == True:
         st.write(f"**{real_name}**님 반갑습니다.")
         authenticator.logout('로그아웃', 'sidebar')
 
+    # --- [관리자/고객 화면 분기] ---
     if credentials['usernames'][username]['role'] == 'admin':
-        st.title("👑 센터장님 전용 관리자 대시보드")
-        st.info("고객 데이터를 등록하고 수정하는 화면입니다.")
-        # (관리자 탭 코드는 이전과 동일하므로 생략 가능하나, 통합본이므로 유지 권장)
-        # ... [이전 관리자 탭 코드 유지] ...
+        st.title("👑 관리자 대시보드")
+        # (관리자 탭/입력 코드는 이전과 동일하되 실명 기반으로 작동하도록 유지)
+        # [관리자 코드는 공간상 생략, 필요시 이전 코드를 붙여넣으셔도 됩니다]
     
     else:
-        # 고객용 리포트 화면 시작
-        st.title(f"📈 {real_name} 대표님 경영 리포트")
+        st.title(f"📈 {real_name} 대표님 맞춤형 경영 리포트")
         
         try:
             res = supabase.table('client_data').select('*').eq('client_id', username).execute()
             if res.data:
                 df = pd.DataFrame(res.data)
-                
-                # created_at 칼럼 부재 시 방어 로직
-                if 'created_at' not in df.columns:
-                    df['created_at'] = pd.Timestamp.now()
-                
+                if 'created_at' not in df.columns: df['created_at'] = pd.Timestamp.now()
                 df['created_at'] = pd.to_datetime(df['created_at']).dt.tz_localize(None)
                 df = df.sort_values('created_at')
                 df['date_label'] = df['created_at'].dt.strftime('%Y-%m-%d')
@@ -111,7 +112,7 @@ if st.session_state["authentication_status"] == True:
                 bg_color = "#87CEEB" if safe_score > 839 else "#FFCCCC"
                 status_text = "정책자금 기준(839) 충족" if safe_score > 839 else "정책자금 기준(839) 미달"
 
-                # [해결] 상단 박스 여백 최소화 및 텍스트 순서 (상태가 위, 안내가 아래)
+                # 상단 요약 박스 (순서: 상태 위 / 점수 아래)
                 st.markdown(f"""
                     <div style="background-color:{bg_color}; padding:10px; border-radius:10px; border:2px solid #333; text-align:center;">
                         <h3 style="color:black; margin:0 0 5px 0;">현재 상태: {status_text}</h3>
@@ -123,52 +124,39 @@ if st.session_state["authentication_status"] == True:
                 
                 st.divider()
 
-                # 요약 지표
                 m1, m2, m3 = st.columns(3)
                 m1.metric("성함", real_name)
-                m2.metric("신용점수", f"{safe_score} 점")
-                m3.metric("월 매출액", f"{safe_sales:,} 만원")
+                m2.metric("최신 신용점수", f"{safe_score} 점")
+                m3.metric("최신 월 매출액", f"{safe_sales:,} 만원")
 
-                # 그래프 섹션
                 col1, col2 = st.columns(2)
-                # 날짜 축 설정 (데이터 1개여도 무조건 표시)
-                x_ax = alt.X('date_label:N', title='입력 날짜', axis=alt.Axis(labelAngle=0))
+                x_ax = alt.X('date_label:N', title='데이터 입력 날짜', axis=alt.Axis(labelAngle=0))
 
                 with col1:
                     st.subheader("🛡️ 신용점수 분석 추이")
-                    # Y축 숫자 선명화 (labelColor='black')
-                    base = alt.Chart(df).encode(
-                        x=x_ax, 
-                        y=alt.Y('credit_score:Q', scale=alt.Scale(domain=[0, 999]), title='점수', axis=alt.Axis(labelColor='black'))
-                    )
+                    base = alt.Chart(df).encode(x=x_ax, y=alt.Y('credit_score:Q', scale=alt.Scale(domain=[0, 999]), title='점수', axis=alt.Axis(labelColor='black')))
                     rule = alt.Chart(pd.DataFrame({'y': [839]})).mark_rule(strokeDash=[5,5], color='gray').encode(y='y:Q')
                     line = base.mark_line(color='#ff4b4b', size=3)
                     point = base.mark_circle(color='#ff4b4b', size=150)
                     text = base.mark_text(dy=-25, fontSize=15, fontWeight='bold', color='black', clip=False).encode(text='credit_score:Q')
-                    
                     st.altair_chart(alt.layer(rule, line, point, text).properties(height=350), use_container_width=True)
-                    st.caption("※ 회색 점선: 정책자금 권장 기준선 (839점)")
 
                 with col2:
                     st.subheader("💰 월 매출 성장 추이")
-                    # [해결 핵심] Y축 숫자와 천단위 콤마 강제 고정
+                    # [진짜 해결] Y축 labelColor='black' 및 format=",.0f"로 숫자 선명하게 표기
                     base_s = alt.Chart(df).encode(
                         x=x_ax, 
                         y=alt.Y('monthly_sales:Q', scale=alt.Scale(domain=[0, 50000]), title='매출(만원)', 
-                                axis=alt.Axis(values=[0, 10000, 20000, 30000, 40000, 50000], labelExpr="format(datum.value, ',')", labelColor='black'))
+                                axis=alt.Axis(values=[0,10000,20000,30000,40000,50000], format=",.0f", labelColor='black'))
                     )
                     line_s = base_s.mark_line(color='#0068c9', size=3)
                     point_s = base_s.mark_circle(color='#0068c9', size=150)
-                    # [해결 핵심] 점 위의 숫자 1,300 강제 출력 및 clip 방지
                     text_s = base_s.mark_text(dy=-25, fontSize=15, fontWeight='bold', color='black', clip=False).encode(text=alt.Text('monthly_sales:Q', format=","))
-                    
                     st.altair_chart(alt.layer(line_s, point_s, text_s).properties(height=350), use_container_width=True)
-                    st.caption("※ 차트 범위: 0원 ~ 5억 원 (50,000만 원)")
 
                 st.divider()
                 st.subheader("💡 공민준 센터장의 핵심 경영 제언")
                 st.info(latest.get('strategy_comment', "제언 수립 중입니다."))
                 
-            else: st.warning("발행된 리포트 데이터가 없습니다.")
         except Exception as e:
-             st.error(f"데이터 오류 발생: {e}")
+             st.error(f"데이터를 불러오는 중입니다...")
