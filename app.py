@@ -80,6 +80,9 @@ if st.session_state.get("authentication_status") == True:
                 df['점수'] = pd.to_numeric(df['credit_score'], errors='coerce').fillna(0).astype(int)
                 df['매출'] = pd.to_numeric(df['monthly_sales'], errors='coerce').fillna(0).astype(int)
 
+                # 💡 [핵심] 매출을 10000으로 나누어 '억원' 단위로 변환 (엔진 오류 원천 차단)
+                df['매출_억'] = df['매출'] / 10000.0
+
                 df['점수_텍스트'] = df['점수'].astype(str)
                 df['매출_텍스트'] = df['매출'].apply(lambda x: f"{x:,}")
 
@@ -108,9 +111,10 @@ if st.session_state.get("authentication_status") == True:
 
                 with col1:
                     st.subheader("🛡️ 신용점수 분석 추이")
+                    # 💡 [필수 복구] 실수로 지웠던 zero=False 를 다시 부활시켰습니다!
                     base = alt.Chart(df).encode(
                         x=x_ax, 
-                        y=alt.Y('점수:Q', scale=alt.Scale(domain=[500, 999]), title='점수', axis=alt.Axis(labelColor='black'))
+                        y=alt.Y('점수:Q', scale=alt.Scale(domain=[500, 999], zero=False, clamp=True), title='점수', axis=alt.Axis(labelColor='black'))
                     )
                     rule = alt.Chart(pd.DataFrame({'y': [839]})).mark_rule(strokeDash=[5,5], color='gray').encode(y='y:Q')
                     
@@ -118,7 +122,6 @@ if st.session_state.get("authentication_status") == True:
                         rule, 
                         base.mark_line(color='#ff4b4b', size=3), 
                         base.mark_circle(size=150, color='#ff4b4b'), 
-                        # 💡 제 어리석은 오타를 fontSize와 fontWeight로 정상 복구했습니다!
                         base.mark_text(dy=-20, fontSize=15, fontWeight='bold', color='black', clip=False).encode(text='점수_텍스트:N')
                     ).properties(height=350)
                     
@@ -128,23 +131,21 @@ if st.session_state.get("authentication_status") == True:
                 with col2:
                     st.subheader("💰 월 매출 성장 추이")
                     
-                    safe_label_expr = "datum.value == 20000 ? '2억' : datum.value == 15000 ? '1.5억' : datum.value == 10000 ? '1억' : datum.value == 5000 ? '5천만' : datum.value == 0 ? '0원' : ''"
-                    
+                    # 💡 [혁신적 해결] 엔진을 뻗게 만드는 복잡한 수식을 삭제하고, Y축을 0.0 ~ 2.0(억)으로 깔끔하게 그립니다.
                     base_s = alt.Chart(df).encode(
                         x=x_ax, 
-                        y=alt.Y('매출:Q', scale=alt.Scale(domain=[0, 20000]), title='매출', 
+                        y=alt.Y('매출_억:Q', scale=alt.Scale(domain=[0, 2], clamp=True), title='매출 (단위: 억원)', 
                                 axis=alt.Axis(
-                                    values=[0, 5000, 10000, 15000, 20000],
-                                    labelExpr=safe_label_expr, 
-                                    labelColor='black',
-                                    tickMinStep=5000
+                                    values=[0, 0.5, 1.0, 1.5, 2.0], 
+                                    format=".1f",  # 0.0, 0.5, 1.0 형태로 고정 출력
+                                    labelColor='black'
                                 ))
                     )
                     
                     chart2 = alt.layer(
                         base_s.mark_line(color='#0068c9', size=3), 
                         base_s.mark_circle(size=150, color='#0068c9'),
-                        # 💡 여기도 fontSize와 fontWeight로 정상 복구했습니다!
+                        # 점 위에는 '1,300' 이라는 원래 텍스트가 정상적으로 표시됩니다.
                         base_s.mark_text(dy=-20, fontSize=15, fontWeight='bold', color='black', clip=False).encode(text='매출_텍스트:N')
                     ).properties(height=350)
                     
