@@ -46,7 +46,8 @@ def update_password_in_db(username, hashed_password):
 # 3. 로그인 및 인증 시스템 (최신 버전 완벽 적용)
 # ==========================================
 credentials = fetch_users()
-
+# [이 줄을 임시로 추가해 보세요!]
+st.write("DB에서 가져온 데이터:", credentials)
 authenticator = stauth.Authenticate(
     credentials,
     'ceo_portal_cookie', 
