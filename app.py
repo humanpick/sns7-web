@@ -10,6 +10,17 @@ import altair as alt
 # ==========================================
 st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide")
 
+# [핵심] 차트 우측 상단의 '데이터 표시', '전체화면' 버튼을 완전히 숨겨버리는 CSS 마법
+st.markdown("""
+    <style>
+    /* Streamlit 차트 메뉴, 전체화면 버튼 영구 삭제 */
+    [data-testid="stElementActions"] {display: none !important;}
+    [data-testid="StyledFullScreenButton"] {display: none !important;}
+    button[title="View fullscreen"] {display: none !important;}
+    summary {display: none !important;}
+    </style>
+""", unsafe_allow_html=True)
+
 # [필수] 센터장님의 Supabase 정보를 입력하세요.
 SUPABASE_URL = "https://pjpnaqyyzlkolnfvlpps.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBqcG5hcXl5emxrb2xuZnZscHBzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxOTEwNzgsImV4cCI6MjA5MTc2NzA3OH0.Y1kR473B-XdxnZZG3akAsp6kvGxTIL1S8IG7is8mgMM"
@@ -131,7 +142,7 @@ elif st.session_state["authentication_status"] == True:
                         st.error(f"저장 실패: {e}")
 
     # ==========================================
-    # 4-B. [고객 모드] 업체 대표님 전용 (데이터 1개 버그 완벽 해결)
+    # 4-B. [고객 모드] 업체 대표님 전용 
     # ==========================================
     else:
         st.title(f"📈 {name} 대표님 맞춤형 경영 리포트")
@@ -141,32 +152,32 @@ elif st.session_state["authentication_status"] == True:
             
             if res.data:
                 df = pd.DataFrame(res.data)
+                
                 if 'created_at' not in df.columns:
                     df['created_at'] = '2026-01-01T00:00:00'
                 
                 df['created_at'] = pd.to_datetime(df['created_at']).dt.tz_localize(None)
                 df = df.sort_values('created_at')
 
-                # 💡 [핵심 해결] 데이터가 1개뿐이면, 엔진이 고장 나지 않도록 하루 전 날짜로 가상의 점을 만듭니다.
+                # 데이터가 1개일 때 선을 그리기 위한 가상 데이터 복제
                 if len(df) == 1:
-                    dummy_row = df.iloc[[0]].copy()
-                    dummy_row['created_at'] = dummy_row['created_at'] - pd.Timedelta(days=1)
-                    df = pd.concat([dummy_row, df], ignore_index=True)
+                    dummy = df.iloc[[0]].copy()
+                    dummy['created_at'] = dummy['created_at'] - pd.Timedelta(days=1)
+                    df = pd.concat([dummy, df], ignore_index=True)
+
+                # 날짜를 무조건 글자로 박아버리기 (날짜 증발 방지)
+                df['date_label'] = df['created_at'].dt.strftime('%Y-%m-%d')
                 
-                # 차트용 X축 라벨 생성 (구분을 위해 연-월-일 시:분 까지 표시)
-                df['차트라벨'] = df['created_at'].dt.strftime('%y-%m-%d %H:%M')
+                df['score_num'] = pd.to_numeric(df['credit_score'], errors='coerce').fillna(0).astype(int)
+                df['sales_num'] = pd.to_numeric(df['monthly_sales'], errors='coerce').fillna(0).astype(int)
                 
-                df['신용점수'] = pd.to_numeric(df['credit_score'], errors='coerce').fillna(0).astype(int)
-                df['매출(만원)'] = pd.to_numeric(df['monthly_sales'], errors='coerce').fillna(0).astype(int)
+                # 강제 텍스트 라벨 (1,300 증발 방지)
+                df['score_str'] = df['score_num'].astype(str)
+                df['sales_str'] = df['sales_num'].apply(lambda x: f"{x:,}")
                 
-                # 강제 텍스트 변환
-                df['점수표기'] = df['신용점수'].astype(str)
-                df['매출표기'] = df['매출(만원)'].apply(lambda x: f"{x:,}")
-                
-                # 최신 데이터는 무조건 맨 마지막 행(실제 데이터)
                 latest_data = df.iloc[-1]
-                safe_score = int(latest_data['신용점수'])
-                safe_sales = int(latest_data['매출(만원)'])
+                safe_score = int(latest_data['score_num'])
+                safe_sales = int(latest_data['sales_num'])
                 
                 bg_color = "#87CEEB" if safe_score > 839 else "#FFCCCC"
                 status_text = "정책자금 기준(839) 충족" if safe_score > 839 else "정책자금 기준(839) 미달"
@@ -190,20 +201,24 @@ elif st.session_state["authentication_status"] == True:
                 # --- 그래프 섹션 ---
                 col1, col2 = st.columns(2)
                 
+                # [해결 1] X축을 고유명사(:N)로 강제하여 날짜가 100% 뜨게 만듭니다.
+                x_axis = alt.X('date_label:N', title='데이터 입력 날짜', axis=alt.Axis(labelAngle=0))
+
                 with col1:
                     st.subheader("🛡️ 신용점수 분석 추이")
                     
                     base_score = alt.Chart(df).encode(
-                        x=alt.X('차트라벨:O', title='데이터 입력 시간', axis=alt.Axis(labelAngle=-45)),
-                        y=alt.Y('신용점수:Q', scale=alt.Scale(domain=[0, 999]), title='신용점수 (0~999점)', axis=alt.Axis(values=[0, 200, 400, 600, 800, 999]))
+                        x=x_axis,
+                        y=alt.Y('score_num:Q', scale=alt.Scale(domain=[0, 999]), title='신용점수 (0~999점)', axis=alt.Axis(tickCount=5))
                     )
                     
                     rule_score = alt.Chart(pd.DataFrame({'y': [839]})).mark_rule(strokeDash=[5, 5], color='gray').encode(y='y:Q')
                     line_score = base_score.mark_line(color='#ff4b4b', size=3)
                     point_score = base_score.mark_circle(color='#ff4b4b', size=150)
-                    text_score = base_score.mark_text(dy=-20, fontSize=15, fontWeight='bold', color='black').encode(text=alt.Text('점수표기:N'))
                     
-                    # 테마 충돌을 막기 위해 theme=None 삭제 (Streamlit 기본 테마 사용)
+                    # 'score_str:N'을 불러와서 무조건 출력
+                    text_score = base_score.mark_text(dy=-25, fontSize=15, fontWeight='bold', color='black').encode(text='score_str:N')
+                    
                     final_score = alt.layer(rule_score, line_score, point_score, text_score).properties(height=350)
                     st.altair_chart(final_score, use_container_width=True)
                     st.caption("※ 회색 점선: 정책자금 권장 기준선 (839점)")
@@ -211,14 +226,17 @@ elif st.session_state["authentication_status"] == True:
                 with col2:
                     st.subheader("💰 월 매출 성장 추이")
                     
+                    # [해결 2] Y축에 format=",.0f"를 주어 1e+4를 원천 봉쇄!
                     base_sales = alt.Chart(df).encode(
-                        x=alt.X('차트라벨:O', title='데이터 입력 시간', axis=alt.Axis(labelAngle=-45)),
-                        y=alt.Y('매출(만원):Q', scale=alt.Scale(domain=[0, 50000]), title='월 매출액 (만원)', axis=alt.Axis(values=[0, 10000, 20000, 30000, 40000, 50000], format=','))
+                        x=x_axis,
+                        y=alt.Y('sales_num:Q', scale=alt.Scale(domain=[0, 50000]), title='월 매출액 (만원)', axis=alt.Axis(format=",.0f", tickCount=5))
                     )
                     
                     line_sales = base_sales.mark_line(color='#0068c9', size=3)
                     point_sales = base_sales.mark_circle(color='#0068c9', size=150)
-                    text_sales = base_sales.mark_text(dy=-20, fontSize=15, fontWeight='bold', color='black').encode(text=alt.Text('매출표기:N'))
+                    
+                    # [해결 3] 'sales_str:N' (미리 콤마를 찍어둔 글자)를 텍스트로 지정하여 숫자 1,300 증발 완벽 방어!
+                    text_sales = base_sales.mark_text(dy=-25, fontSize=15, fontWeight='bold', color='black').encode(text='sales_str:N')
                     
                     final_sales = alt.layer(line_sales, point_sales, text_sales).properties(height=350)
                     st.altair_chart(final_sales, use_container_width=True)
