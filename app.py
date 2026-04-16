@@ -86,12 +86,10 @@ if st.session_state.get("authentication_status"):
         authenticator.logout('시스템 로그아웃', 'sidebar')
 
     # ------------------------------------------
-    # 👑 [ADMIN] 관리자 대시보드 (통합 버전)
+    # 👑 [ADMIN] 관리자 대시보드
     # ------------------------------------------
     if user_role == 'admin':
         st.title("👑 관리자 데이터 센터")
-        
-        # 관리용 탭 구성 (입력 / 유저관리 / 전체기록)
         tab1, tab2, tab3 = st.tabs(["📝 데이터 입력", "👥 고객 등록 및 관리", "📜 전체 리포트 이력"])
         
         # [Tab 1: 데이터 입력]
@@ -122,21 +120,44 @@ if st.session_state.get("authentication_status"):
         # [Tab 2: 고객 등록 및 관리]
         with tab2:
             st.subheader("신규 고객 계정 생성")
+            # 💡 [업데이트] 요청하신 대로 입력 순서를 변경하고 ID 자동 생성 로직을 넣었습니다.
             with st.form("user_reg_form"):
-                new_id = st.text_input("고객 ID (영문/숫자)")
-                new_name = st.text_input("고객 성함")
-                new_pw = st.text_input("비밀번호", type="password")
-                if st.form_submit_button("고객 등록"):
-                    hashed_pw = stauth.Hasher([new_pw]).generate()[0]
-                    new_user = {"username": new_id, "name": new_name, "password": hashed_pw, "role": "viewer"}
-                    supabase.table('users').insert(new_user).execute()
-                    st.success(f"{new_name} 고객님이 등록되었습니다. 새로고침 후 이용하세요.")
-                    st.rerun()
+                new_name = st.text_input("1. 고객 성함")
+                new_pw = st.text_input("2. 비밀번호 설정", type="password")
+                new_phone = st.text_input("3. 휴대폰 번호 (숫자만 입력, 예: 01012345678)")
+                
+                st.caption("※ ID는 'kdj + 휴대폰 뒷자리 4자리'로 자동 생성됩니다.")
+                
+                if st.form_submit_button("고객 등록 및 ID 생성"):
+                    if not new_name or not new_pw or len(new_phone) < 4:
+                        st.warning("모든 정보를 정확히 입력해 주세요. (휴대폰 번호 4자리 이상 필수)")
+                    else:
+                        # 💡 ID 자동 생성 로직
+                        generated_id = f"kdj{new_phone[-4:]}"
+                        
+                        # 비밀번호 암호화
+                        hashed_pw = stauth.Hasher([new_pw]).generate()[0]
+                        
+                        new_user = {
+                            "username": generated_id, 
+                            "name": new_name, 
+                            "password": hashed_pw, 
+                            "role": "viewer"
+                        }
+                        
+                        try:
+                            supabase.table('users').insert(new_user).execute()
+                            st.success(f"✅ {new_name} 대표님 등록 완료! (아이디: {generated_id})")
+                            st.balloons()
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"등록 실패 (ID 중복 가능성): {e}")
             
             st.divider()
             st.subheader("현재 등록된 고객 리스트")
-            user_df = pd.DataFrame([{"ID": k, "이름": v['name']} for k, v in credentials['usernames'].items() if v['role'] != 'admin'])
-            st.table(user_df)
+            client_data_list = [{"ID": k, "이름": v['name']} for k, v in credentials['usernames'].items() if v['role'] != 'admin']
+            if client_data_list:
+                st.table(pd.DataFrame(client_data_list))
 
         # [Tab 3: 전체 리포트 이력]
         with tab3:
@@ -144,14 +165,13 @@ if st.session_state.get("authentication_status"):
             all_res = supabase.table('client_data').select('*').order('created_at', desc=True).execute()
             if all_res.data:
                 all_df = pd.DataFrame(all_res.data)
-                # ID 대신 이름을 보여주기 위해 매핑
                 all_df['고객명'] = all_df['client_id'].apply(lambda x: credentials['usernames'].get(x, {}).get('name', x))
                 st.dataframe(all_df[['created_at', '고객명', 'credit_score', 'monthly_sales', 'strategy_comment']], use_container_width=True)
             else:
-                st.write("아직 발행된 리포트가 없습니다.")
+                st.write("발행된 리포트가 없습니다.")
 
     # ------------------------------------------
-    # 📈 [VIEWER] 고객 리포트 화면 (이전 무결성 코드 유지)
+    # 📈 [VIEWER] 고객 리포트 화면
     # ------------------------------------------
     else:
         try:
@@ -173,7 +193,7 @@ if st.session_state.get("authentication_status"):
                                 padding: 30px; border-radius: 15px; border-left: 10px solid {GOLD}; 
                                 color: white; text-align: center; margin-bottom: 25px;">
                         <h1 style="color: {GOLD}; margin-bottom: 10px;">📈 {credentials['usernames'][username]['name']} 대표님 경영 리포트</h1>
-                        <p style="font-size: 18px; margin: 0;">현재 상태: 
+                        <p style="font-size: 18px; margin: 0;">현재 경영 상태: 
                             <span style="font-weight: 700; color: {'#58D68D' if int(latest['점수']) > 839 else '#F1948A'};">
                                 {"정책자금 승인 권장권" if int(latest['점수']) > 839 else "신용 관리 집중 기간"}
                             </span>
@@ -196,7 +216,7 @@ if st.session_state.get("authentication_status"):
                     base = alt.Chart(df).encode(x=x_ax, y=alt.Y('점수:Q', scale=alt.Scale(domain=[500, 999], zero=False)))
                     rule = alt.Chart(pd.DataFrame({'y': [839]})).mark_rule(strokeDash=[5,5], color='gray').encode(y='y:Q')
                     chart1 = alt.layer(rule, base.mark_line(color='#ff4b4b', size=3), base.mark_circle(size=150, color='#ff4b4b'),
-                                       base.mark_text(dy=-20, fontSize=15, fontWeight='bold').encode(text='점_텍스트:N')).properties(height=350)
+                                       base.mark_text(dy=-20, fontSize=15, fontWeight='bold').encode(text='점수_텍스트:N')).properties(height=350)
                     st.altair_chart(chart1, use_container_width=True, theme=None)
 
                 with col2:
@@ -216,6 +236,6 @@ if st.session_state.get("authentication_status"):
              st.error(f"데이터 로딩 오류: {e}")
 
 elif st.session_state.get("authentication_status") is False:
-    st.error('인증 정보 오류')
+    st.error('아이디 또는 비밀번호를 다시 확인해 주세요.')
 elif st.session_state.get("authentication_status") is None:
-    st.info('로그인해 주세요.')
+    st.info('제공받으신 CEO 계정 정보를 입력하여 로그인해 주세요.')
