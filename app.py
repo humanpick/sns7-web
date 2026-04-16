@@ -30,6 +30,8 @@ st.markdown("""
     details {
         display: none !important;
         visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -37,6 +39,7 @@ st.markdown("""
 # [필수] 센터장님의 Supabase 정보를 입력하세요.
 SUPABASE_URL = "https://pjpnaqyyzlkolnfvlpps.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBqcG5hcXl5emxrb2xuZnZscHBzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxOTEwNzgsImV4cCI6MjA5MTc2NzA3OH0.Y1kR473B-XdxnZZG3akAsp6kvGxTIL1S8IG7is8mgMM"
+
 
 @st.cache_resource
 def init_connection():
@@ -98,16 +101,12 @@ if st.session_state["authentication_status"] == True:
                 df['created_at'] = pd.to_datetime(df['created_at']).dt.tz_localize(None)
                 df = df.sort_values('created_at')
                 
-                # 하단 날짜 노출
+                # 하단 데이터 입력일 텍스트
                 df['date_label'] = df['created_at'].dt.strftime('%Y-%m-%d')
                 
                 # 수치 변환
                 df['score_val'] = pd.to_numeric(df['credit_score'], errors='coerce').fillna(0).astype(int)
                 df['sales_val'] = pd.to_numeric(df['monthly_sales'], errors='coerce').fillna(0).astype(int)
-                
-                # 숫자를 미리 텍스트로 고정
-                df['score_text'] = df['score_val'].astype(str)
-                df['sales_text'] = df['sales_val'].apply(lambda x: f"{x:,}")
                 
                 latest = df.iloc[-1]
                 safe_score = int(latest['score_val'])
@@ -134,12 +133,11 @@ if st.session_state["authentication_status"] == True:
 
                 col1, col2 = st.columns(2)
                 
-                # X축 (하단 날짜 표기 강제 노출)
+                # X축 (겹치더라도 날짜 강제 표기)
                 x_ax = alt.X('date_label:N', title='데이터 입력일', axis=alt.Axis(labelAngle=0, labelColor='black', labelOverlap=False))
 
                 with col1:
                     st.subheader("🛡️ 신용점수 분석 추이")
-                    # Y축 도메인 500 ~ 999 설정
                     base = alt.Chart(df).encode(
                         x=x_ax, 
                         y=alt.Y('score_val:Q', scale=alt.Scale(domain=[500, 999]), title='점수', axis=alt.Axis(labelColor='black'))
@@ -148,20 +146,19 @@ if st.session_state["authentication_status"] == True:
                     line = base.mark_line(color='#ff4b4b', size=3)
                     point = base.mark_circle(color='#ff4b4b', size=150)
                     
-                    # 텍스트 위치(dy)와 속성 재조정
+                    # [핵심] clip=False를 넣어서 글씨가 잘리는 것을 원천 봉쇄
                     text = base.mark_text(
-                        align='center', baseline='bottom', dy=-15, fontSize=15, fontWeight='bold', color='black'
-                    ).encode(text='score_text:N')
+                        dy=-25, size=16, fontWeight='bold', color='black', clip=False
+                    ).encode(text='score_val:Q')
                     
                     chart_score = alt.layer(rule, line, point, text).properties(height=350)
                     
-                    # [핵심 방어] theme=None 을 적용하여 스트림릿의 간섭을 완전히 차단!!
+                    # [핵심] theme=None 을 적용하여 스트림릿의 간섭을 완전히 차단!
                     st.altair_chart(chart_score, use_container_width=True, theme=None)
                     st.caption("※ 회색 점선: 정책자금 권장 기준선 (839점)")
 
                 with col2:
                     st.subheader("💰 월 매출 성장 추이")
-                    # Y축 0 ~ 50,000(5억) 고정
                     base_s = alt.Chart(df).encode(
                         x=x_ax, 
                         y=alt.Y('sales_val:Q', scale=alt.Scale(domain=[0, 50000]), title='매출(만원)', 
@@ -170,13 +167,14 @@ if st.session_state["authentication_status"] == True:
                     line_s = base_s.mark_line(color='#0068c9', size=3)
                     point_s = base_s.mark_circle(color='#0068c9', size=150)
                     
+                    # [핵심] dy를 더 띄워서 바닥에 안 닿게 하고 clip=False 적용
                     text_s = base_s.mark_text(
-                        align='center', baseline='bottom', dy=-15, fontSize=15, fontWeight='bold', color='black'
-                    ).encode(text='sales_text:N')
+                        dy=-25, size=16, fontWeight='bold', color='black', clip=False
+                    ).encode(text=alt.Text('sales_val:Q', format=','))
                     
                     chart_sales = alt.layer(line_s, point_s, text_s).properties(height=350)
                     
-                    # [핵심 방어] theme=None 을 적용하여 스트림릿의 간섭을 완전히 차단!!
+                    # [핵심] theme=None 을 적용하여 스트림릿의 간섭을 완전히 차단!
                     st.altair_chart(chart_sales, use_container_width=True, theme=None)
                     st.caption("※ 차트 범위: 0원 ~ 5억 원 (50,000만 원)")
 
@@ -184,7 +182,6 @@ if st.session_state["authentication_status"] == True:
                 st.subheader("💡 공민준 센터장의 핵심 경영 제언")
                 st.info(latest.get('strategy_comment', "제언 수립 중입니다."))
                 
-            else: st.warning("아직 발행된 리포트가 없습니다.")
         except Exception as e:
              st.error(f"그래프 생성 중 오류 발생: {e}")
 
