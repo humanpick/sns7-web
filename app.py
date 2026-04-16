@@ -4,7 +4,6 @@ from supabase import create_client, Client
 import pandas as pd
 import bcrypt
 import altair as alt
-from datetime import datetime
 
 # ==========================================
 # 1. 시스템 설정 및 Supabase 연동
@@ -13,7 +12,7 @@ st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide"
 
 # [필수] 센터장님의 Supabase 정보를 입력하세요.
 SUPABASE_URL = "https://pjpnaqyyzlkolnfvlpps.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBqcG5hcXl5emxrb2xuZnZscHBzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxOTEwNzgsImV4cCI6MjA5MTc2NzA3OH0.Y1kR473B-XdxnZZG3akAsp6kvGxTIL1S8IG7is8mgMM"
+SUPABASE_KEY = "여기에_복사하신_긴_anon_public_key를_넣으세요"
 
 @st.cache_resource
 def init_connection():
@@ -132,32 +131,36 @@ elif st.session_state["authentication_status"] == True:
                         st.error(f"저장 실패: {e}")
 
     # ==========================================
-    # 4-B. [고객 모드] 업체 대표님 전용 (날짜 표기 및 정밀 그래프)
+    # 4-B. [고객 모드] 업체 대표님 전용 (날짜 에러 원천 차단)
     # ==========================================
     else:
         st.title(f"📈 {name} 대표님 맞춤형 경영 리포트")
         
         try:
-            # 고객 데이터를 입력 날짜순으로 가져옵니다.
-            res = supabase.table('client_data').select('*').eq('client_id', username).order('created_at').execute()
+            # 고객 데이터 불러오기
+            res = supabase.table('client_data').select('*').eq('client_id', username).execute()
             
             if res.data:
-                # 최신 데이터 추출
-                latest_data = res.data[-1]
-                safe_score = int(latest_data.get('credit_score', 0))
-                safe_sales = int(latest_data.get('monthly_sales', 0))
+                # 에러를 절대 허용하지 않는 Pandas 데이터 가공
+                df = pd.DataFrame(res.data)
                 
-                # 그래프용 데이터 가공 (날짜 형식 변환)
-                chart_data = []
-                for d in res.data:
-                    dt_str = datetime.fromisoformat(d['created_at'].replace('Z', '+00:00')).strftime('%Y-%m-%d')
-                    chart_data.append({
-                        "날짜": dt_str,
-                        "신용점수": int(d['credit_score']),
-                        "매출(만원)": int(d['monthly_sales'])
-                    })
-                df = pd.DataFrame(chart_data)
-
+                # 날짜가 없으면 가짜 날짜라도 넣어서 에러 방지
+                if 'created_at' not in df.columns:
+                    df['created_at'] = '2026-01-01T00:00:00'
+                
+                # 시간순 정렬 후, 날짜 문자열 예쁘게 자르기 (YYYY-MM-DD HH:MM)
+                df = df.sort_values('created_at')
+                df['입력일시'] = df['created_at'].astype(str).str[:16].str.replace('T', ' ')
+                
+                # 숫자에 문자가 섞여와도 0으로 치환하여 강제 변환 (에러 원천 차단)
+                df['신용점수'] = pd.to_numeric(df['credit_score'], errors='coerce').fillna(0).astype(int)
+                df['매출(만원)'] = pd.to_numeric(df['monthly_sales'], errors='coerce').fillna(0).astype(int)
+                
+                # 가장 최근에 입력한 최신 데이터 뽑기
+                latest_data = df.iloc[-1]
+                safe_score = int(latest_data['신용점수'])
+                safe_sales = int(latest_data['매출(만원)'])
+                
                 # [839점 기준 자동 배경색 설정]
                 bg_color = "#87CEEB" if safe_score > 839 else "#FFCCCC"
                 status_text = "정책자금 기준(839) 충족" if safe_score > 839 else "정책자금 기준(839) 미달"
@@ -166,7 +169,7 @@ elif st.session_state["authentication_status"] == True:
                     <div style="background-color:{bg_color}; padding:20px; border-radius:10px; border: 2px solid #333; text-align:center;">
                         <h2 style="color:black; margin:0;">현재 상태: {status_text}</h2>
                         <p style="color:black; font-size:18px; margin:10px 0 0 0;">
-                            <b>{name}</b> 대표님의 현재 신용점수는 <b>{safe_score}점</b> 입니다.
+                            <b>{name}</b> 대표님의 최신 신용점수는 <b>{safe_score}점</b> 입니다.
                         </p>
                     </div>
                 """, unsafe_allow_html=True)
@@ -184,25 +187,22 @@ elif st.session_state["authentication_status"] == True:
                 
                 with col1:
                     st.subheader("🛡️ 신용점수 분석 추이")
-                    # X축에 입력 날짜를 표기하고 Y축은 0~999 고정
                     score_chart = alt.Chart(df).mark_line(point=True, color='red').encode(
-                        x=alt.X('날짜', title='입력 날짜', sort=None),
+                        x=alt.X('입력일시', title='데이터 입력 시간', sort=None),
                         y=alt.Y('신용점수', scale=alt.Scale(domain=[0, 999]), title='점수'),
-                        tooltip=['날짜', '신용점수']
+                        tooltip=['입력일시', '신용점수']
                     ).properties(height=350)
                     
-                    # 839점 가이드라인
                     rule = alt.Chart(pd.DataFrame({'y': [839]})).mark_rule(strokeDash=[5, 5], color='black').encode(y='y')
                     st.altair_chart(score_chart + rule, use_container_width=True)
                     st.caption("※ 점선: 정책자금 권장 기준선 (839점)")
 
                 with col2:
                     st.subheader("💰 월 매출 성장 추이")
-                    # X축에 입력 날짜를 표기하고 Y축은 0~5억(50,000만원) 고정
                     sales_chart = alt.Chart(df).mark_line(point=True, color='blue').encode(
-                        x=alt.X('날짜', title='입력 날짜', sort=None),
+                        x=alt.X('입력일시', title='데이터 입력 시간', sort=None),
                         y=alt.Y('매출(만원)', scale=alt.Scale(domain=[0, 50000]), title='매출(만원)'),
-                        tooltip=['날짜', '매출(만원)']
+                        tooltip=['입력일시', '매출(만원)']
                     ).properties(height=350)
                     
                     st.altair_chart(sales_chart, use_container_width=True)
@@ -215,4 +215,5 @@ elif st.session_state["authentication_status"] == True:
             else:
                 st.warning("아직 발행된 리포트가 없습니다.")
         except Exception as e:
-             st.warning(f"데이터를 불러오는 중입니다.")
+             # 에러 숨기지 않고 띄우기
+             st.error(f"시스템 에러 발생 (코드 문제): {e}")
