@@ -120,7 +120,7 @@ elif st.session_state["authentication_status"] == True:
                         }).execute()
 
                         supabase.table('client_data').upsert({
-                            'client_id': c_id, 'company_name': f"{c_name}_상호", # 내부 관리용
+                            'client_id': c_id, 'company_name': f"{c_name}_상호", 
                             'credit_score': c_score, 'monthly_sales': c_sales, 'strategy_comment': c_comment
                         }).execute()
 
@@ -131,7 +131,7 @@ elif st.session_state["authentication_status"] == True:
                         st.error(f"저장 실패: {e}")
 
     # ==========================================
-    # 4-B. [고객 모드] 업체 대표님 전용 (시각화 강화)
+    # 4-B. [고객 모드] 업체 대표님 전용 (가짜 데이터 제거)
     # ==========================================
     else:
         st.title(f"📈 {name} 대표님 맞춤형 경영 리포트")
@@ -163,38 +163,37 @@ elif st.session_state["authentication_status"] == True:
                 # --- 그래프 섹션 ---
                 col1, col2 = st.columns(2)
                 
-                # 1. 신용점수 정밀 그래프 (점과 선, 0~999 고정)
+                # 1. 신용점수 정밀 그래프 (실제 데이터 유지)
                 with col1:
                     st.subheader("🛡️ 신용점수 정밀 분석")
-                    score_history = [max(0, safe_score-50), max(0, safe_score-20), safe_score]
+                    # 가짜 우상향 데이터를 지우고, 입력된 현재 값으로 평행선 유지
+                    score_history = [safe_score, safe_score, safe_score]
                     df_score = pd.DataFrame({
                         "시점": ["과거", "직전", "현재"],
                         "점수": score_history
                     })
                     
-                    # Altair를 이용한 정밀 차트 (고정 범위 0~999)
                     score_chart = alt.Chart(df_score).mark_line(point=True, color='red').encode(
                         x=alt.X('시점', sort=None),
                         y=alt.Y('점수', scale=alt.Scale(domain=[0, 999])),
                         tooltip=['시점', '점수']
                     ).properties(height=300)
                     
-                    # 839점 기준선 추가
                     rule = alt.Chart(pd.DataFrame({'y': [839]})).mark_rule(strokeDash=[5, 5], color='black').encode(y='y')
                     
                     st.altair_chart(score_chart + rule, use_container_width=True)
                     st.caption("※ 점선: 정책자금 권장 기준선 (839점)")
 
-                # 2. 월 매출 성장 추이 (점과 선, 0~5억 고정)
+                # 2. 월 매출 성장 추이 (실제 데이터 유지)
                 with col2:
                     st.subheader("💰 월 매출 성장 추이")
-                    sales_history = [int(safe_sales*0.6), int(safe_sales*0.85), safe_sales]
+                    # 가짜 우상향 데이터를 지우고, 입력된 현재 값으로 평행선 유지
+                    sales_history = [safe_sales, safe_sales, safe_sales]
                     df_sales = pd.DataFrame({
                         "시점": ["과거", "직전", "현재"],
                         "매출(만원)": sales_history
                     })
                     
-                    # Altair를 이용한 정밀 차트 (고정 범위 0~50,000)
                     sales_chart = alt.Chart(df_sales).mark_line(point=True, color='blue').encode(
                         x=alt.X('시점', sort=None),
                         y=alt.Y('매출(만원)', scale=alt.Scale(domain=[0, 50000])),
