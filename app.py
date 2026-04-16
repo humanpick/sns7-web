@@ -6,7 +6,7 @@ import altair as alt
 import bcrypt
 
 # ==========================================
-# 1. 디자인 시스템 및 변수 정의 (에러 방지 핵심)
+# 1. 디자인 시스템 및 변수 정의 (UI 절대 고정)
 # ==========================================
 st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide")
 
@@ -14,9 +14,9 @@ st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide"
 NAVY = "#001F3F"
 GOLD = "#D4AF37"
 BG_COLOR = "#F4F7F9"
-BORDER = "#D1D9E0"  # 👈 여기서 발생했던 에러를 해결했습니다.
+BORDER = "#D1D9E0"
 
-# 프리미엄 UI 스타일 시트 주입
+# 프리미엄 UI 스타일 시트 주입 (민준님 지정 스탠다드)
 st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;700&display=swap');
@@ -70,7 +70,7 @@ def init_supabase():
 supabase = init_supabase()
 
 # ==========================================
-# 2. 데이터 및 인증 코어 (안정성 강화)
+# 2. 데이터 및 인증 코어
 # ==========================================
 def fetch_creds():
     try:
@@ -88,8 +88,30 @@ def fetch_creds():
 if 'creds' not in st.session_state:
     st.session_state.creds = fetch_creds()
 
-authenticator = stauth.Authenticate(st.session_state.creds, 'ceo_portal_v23', 'key_v23', 30)
+authenticator = stauth.Authenticate(st.session_state.creds, 'ceo_portal_v25', 'key_v25', 30)
 authenticator.login('main')
+
+# ------------------------------------------
+# 💡 [신규 기능] 전략 자동 생성 AI 로직
+# ------------------------------------------
+def generate_strategy(score, sales):
+    if score >= 900: sc_text = "최상위권 신용도를 유지 중입니다."
+    elif score >= 840: sc_text = "정책자금 승인 권장권으로 매우 안정적입니다."
+    elif score >= 750: sc_text = "보통 수준의 신용도이나, 자금 조달을 위해 상향 관리가 필요합니다."
+    else: sc_text = "현재 신용도 관리가 시급한 단계입니다. 연체 관리 및 카드 이용 패턴 점검이 필요합니다."
+
+    if sales >= 5000: sl_text = "규모의 경제를 실현하는 단계로, 시설 자금 확보를 통한 확장이 필요합니다."
+    elif sales >= 1500: sl_text = "성장기로 접어들었습니다. 고정비 최적화와 운전 자금 확보가 핵심입니다."
+    else: sl_text = "기초 체력을 다지는 시기입니다. 초기 정책자금 및 보증 한도 증액을 우선 검토해야 합니다."
+
+    if score >= 840 and sales >= 1500:
+        conclusion = "현시점은 저금리 정책자금을 최대한 확보하여 사업 규모를 키우기에 최적의 타이밍입니다."
+    elif score < 840 and sales >= 1500:
+        conclusion = "매출은 양호하나 신용도가 발목을 잡을 수 있습니다. 신용 관리에 집중하여 대출 금리를 낮추는 것이 급선무입니다."
+    else:
+        conclusion = "소상공인 지원 사업과 기초 미소금융 자금을 활용하여 리스크를 분산하며 성장을 도모해야 합니다."
+
+    return f"{sc_text}\n\n{sl_text}\n\n💡 결론: {conclusion}\n\n추가적인 상세 실행 방안은 다음 대면 컨설팅에서 논의하겠습니다."
 
 if st.session_state.get("authentication_status"):
     username = st.session_state["username"]
@@ -102,7 +124,7 @@ if st.session_state.get("authentication_status"):
         authenticator.logout('시스템 로그아웃', 'sidebar')
 
     # ------------------------------------------
-    # 👑 [ADMIN] 관리자 데이터 센터 (입력/관리/수정 통합)
+    # 👑 [ADMIN] 관리자 데이터 센터 
     # ------------------------------------------
     if u_info.get('role') == 'admin':
         st.title("👑 관리자 데이터 센터")
@@ -114,23 +136,39 @@ if st.session_state.get("authentication_status"):
             if not v_list: st.info("고객을 먼저 등록해 주세요.")
             else:
                 sel_id = st.selectbox("대상 고객 선택", v_list, format_func=lambda x: f"{st.session_state.creds['usernames'][x]['name']} ({x})")
-                with st.form("input_v23"):
+                
+                # 💡 세션 상태에 자동 생성 문구 저장
+                if 'auto_comment' not in st.session_state:
+                    st.session_state.auto_comment = ""
+                
+                with st.form("input_v25"):
                     comp = st.text_input("분석 업체명")
                     c1, c2 = st.columns(2)
                     sc = c1.number_input("신용점수", 500, 999, 850)
                     sa = c2.number_input("월 매출액(만원)", 0, 100000, 1300)
-                    cmt = st.text_area("공민준 센터장의 경영 전략 제시")
-                    if st.form_submit_button("데이터 추가 및 발행"):
+                    
+                    cmt = st.text_area("공민준 센터장의 경영 전략 제시", value=st.session_state.auto_comment, height=150)
+                    
+                    col_btn1, col_btn2 = st.columns(2)
+                    auto_btn = col_btn1.form_submit_button("💡 전략 자동 생성")
+                    submit_btn = col_btn2.form_submit_button("데이터 추가 및 발행")
+                    
+                    if auto_btn:
+                        st.session_state.auto_comment = generate_strategy(sc, sa)
+                        st.rerun()
+
+                    if submit_btn:
                         supabase.table('client_data').insert({
                             "client_id": sel_id, "company_name": comp,
                             "credit_score": str(sc), "monthly_sales": str(sa), "strategy_comment": cmt
                         }).execute()
+                        st.session_state.auto_comment = "" # 전송 후 초기화
                         st.success(f"{comp} 데이터가 성공적으로 저장되었습니다.")
                         st.rerun()
 
         with t2:
             st.subheader("신규 고객 등록")
-            with st.form("reg_v23"):
+            with st.form("reg_v25"):
                 r_id = st.text_input("아이디")
                 r_pw = st.text_input("비밀번호", type="password")
                 r_name = st.text_input("성함")
@@ -151,7 +189,6 @@ if st.session_state.get("authentication_status"):
             if raw_res.data:
                 history_df = pd.DataFrame(raw_res.data)
                 
-                # 데이터 에디터 출력
                 edited_df = st.data_editor(
                     history_df,
                     column_config={
@@ -164,7 +201,7 @@ if st.session_state.get("authentication_status"):
                     },
                     disabled=["created_at", "client_id"],
                     num_rows="dynamic",
-                    key="history_editor_v23",
+                    key="history_editor_v25",
                     use_container_width=True
                 )
                 
@@ -173,7 +210,7 @@ if st.session_state.get("authentication_status"):
                 st.write("표시할 데이터가 없습니다.")
 
     # ------------------------------------------
-    # 📈 [VIEWER] 하이엔드 경영 리포트 (V21 스탠다드)
+    # 📈 [VIEWER] 하이엔드 경영 리포트 (V23 스탠다드 완전 보존)
     # ------------------------------------------
     else:
         try:
