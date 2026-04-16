@@ -12,7 +12,7 @@ st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide"
 
 # [필수] 센터장님의 Supabase 정보를 입력하세요.
 SUPABASE_URL = "https://pjpnaqyyzlkolnfvlpps.supabase.co"
-SUPABASE_KEY = "여기에_복사하신_긴_anon_public_key를_넣으세요"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBqcG5hcXl5emxrb2xuZnZscHBzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxOTEwNzgsImV4cCI6MjA5MTc2NzA3OH0.Y1kR473B-XdxnZZG3akAsp6kvGxTIL1S8IG7is8mgMM"
 
 @st.cache_resource
 def init_connection():
@@ -131,37 +131,31 @@ elif st.session_state["authentication_status"] == True:
                         st.error(f"저장 실패: {e}")
 
     # ==========================================
-    # 4-B. [고객 모드] 업체 대표님 전용 (날짜 에러 원천 차단)
+    # 4-B. [고객 모드] 업체 대표님 전용 (그래프 정밀 제어)
     # ==========================================
     else:
         st.title(f"📈 {name} 대표님 맞춤형 경영 리포트")
         
         try:
-            # 고객 데이터 불러오기
             res = supabase.table('client_data').select('*').eq('client_id', username).execute()
             
             if res.data:
-                # 에러를 절대 허용하지 않는 Pandas 데이터 가공
                 df = pd.DataFrame(res.data)
                 
-                # 날짜가 없으면 가짜 날짜라도 넣어서 에러 방지
                 if 'created_at' not in df.columns:
                     df['created_at'] = '2026-01-01T00:00:00'
                 
-                # 시간순 정렬 후, 날짜 문자열 예쁘게 자르기 (YYYY-MM-DD HH:MM)
                 df = df.sort_values('created_at')
-                df['입력일시'] = df['created_at'].astype(str).str[:16].str.replace('T', ' ')
+                # 날짜만 깔끔하게 나오도록 연-월-일 포맷팅
+                df['입력일시'] = df['created_at'].astype(str).str[:10]
                 
-                # 숫자에 문자가 섞여와도 0으로 치환하여 강제 변환 (에러 원천 차단)
                 df['신용점수'] = pd.to_numeric(df['credit_score'], errors='coerce').fillna(0).astype(int)
                 df['매출(만원)'] = pd.to_numeric(df['monthly_sales'], errors='coerce').fillna(0).astype(int)
                 
-                # 가장 최근에 입력한 최신 데이터 뽑기
                 latest_data = df.iloc[-1]
                 safe_score = int(latest_data['신용점수'])
                 safe_sales = int(latest_data['매출(만원)'])
                 
-                # [839점 기준 자동 배경색 설정]
                 bg_color = "#87CEEB" if safe_score > 839 else "#FFCCCC"
                 status_text = "정책자금 기준(839) 충족" if safe_score > 839 else "정책자금 기준(839) 미달"
 
@@ -176,7 +170,6 @@ elif st.session_state["authentication_status"] == True:
                 
                 st.divider()
 
-                # 지표 요약
                 m1, m2, m3 = st.columns(3)
                 m1.metric("성함", name)
                 m2.metric("최신 신용점수", f"{safe_score} 점")
@@ -187,25 +180,47 @@ elif st.session_state["authentication_status"] == True:
                 
                 with col1:
                     st.subheader("🛡️ 신용점수 분석 추이")
-                    score_chart = alt.Chart(df).mark_line(point=True, color='red').encode(
-                        x=alt.X('입력일시', title='데이터 입력 시간', sort=None),
-                        y=alt.Y('신용점수', scale=alt.Scale(domain=[0, 999]), title='점수'),
-                        tooltip=['입력일시', '신용점수']
-                    ).properties(height=350)
                     
-                    rule = alt.Chart(pd.DataFrame({'y': [839]})).mark_rule(strokeDash=[5, 5], color='black').encode(y='y')
-                    st.altair_chart(score_chart + rule, use_container_width=True)
+                    # 선과 점 그리기 (입력일시를 문자열(N)로 강제 지정하여 무조건 하단에 표시)
+                    line_chart_score = alt.Chart(df).mark_line(point=True, color='red').encode(
+                        x=alt.X('입력일시:N', title='입력 날짜'),
+                        y=alt.Y('신용점수:Q', scale=alt.Scale(domain=[0, 999]), title='점수 (0~999)')
+                    )
+                    
+                    # 점 아래에 숫자 라벨 달기 (dy=15 로 점 아래로 내림)
+                    text_chart_score = alt.Chart(df).mark_text(dy=15, fontSize=14, fontWeight='bold', color='black').encode(
+                        x=alt.X('입력일시:N'),
+                        y=alt.Y('신용점수:Q'),
+                        text=alt.Text('신용점수:Q')
+                    )
+                    
+                    # 839점 점선 기준선
+                    rule = alt.Chart(pd.DataFrame({'y': [839]})).mark_rule(strokeDash=[5, 5], color='black').encode(y='y:Q')
+                    
+                    # 합치기
+                    final_score_chart = (line_chart_score + text_chart_score + rule).properties(height=350)
+                    st.altair_chart(final_score_chart, use_container_width=True)
                     st.caption("※ 점선: 정책자금 권장 기준선 (839점)")
 
                 with col2:
                     st.subheader("💰 월 매출 성장 추이")
-                    sales_chart = alt.Chart(df).mark_line(point=True, color='blue').encode(
-                        x=alt.X('입력일시', title='데이터 입력 시간', sort=None),
-                        y=alt.Y('매출(만원)', scale=alt.Scale(domain=[0, 50000]), title='매출(만원)'),
-                        tooltip=['입력일시', '매출(만원)']
-                    ).properties(height=350)
                     
-                    st.altair_chart(sales_chart, use_container_width=True)
+                    # 선과 점 그리기
+                    line_chart_sales = alt.Chart(df).mark_line(point=True, color='blue').encode(
+                        x=alt.X('입력일시:N', title='입력 날짜'),
+                        y=alt.Y('매출(만원):Q', scale=alt.Scale(domain=[0, 50000]), title='매출액 (0~50,000만원)')
+                    )
+                    
+                    # 점 아래에 숫자 라벨 달기 (천 단위 콤마 추가)
+                    text_chart_sales = alt.Chart(df).mark_text(dy=15, fontSize=14, fontWeight='bold', color='black').encode(
+                        x=alt.X('입력일시:N'),
+                        y=alt.Y('매출(만원):Q'),
+                        text=alt.Text('매출(만원):Q', format=',')
+                    )
+                    
+                    # 합치기
+                    final_sales_chart = (line_chart_sales + text_chart_sales).properties(height=350)
+                    st.altair_chart(final_sales_chart, use_container_width=True)
                     st.caption("※ 차트 범위: 0원 ~ 5억 원 (50,000만 원)")
 
                 st.divider()
@@ -215,5 +230,4 @@ elif st.session_state["authentication_status"] == True:
             else:
                 st.warning("아직 발행된 리포트가 없습니다.")
         except Exception as e:
-             # 에러 숨기지 않고 띄우기
              st.error(f"시스템 에러 발생 (코드 문제): {e}")
