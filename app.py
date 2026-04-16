@@ -9,9 +9,8 @@ import bcrypt
 # ==========================================
 st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide")
 
-# [필수] 센터장님의 Supabase 정보를 입력하세요. (따옴표 유지)
 SUPABASE_URL = "https://pjpnaqyyzlkolnfvlpps.supabase.co"
-SUPABASE_KEY = "여기에_복사하신_긴_anon_public_key를_넣으세요"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBqcG5hcXl5emxrb2xuZnZscHBzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxOTEwNzgsImV4cCI6MjA5MTc2NzA3OH0.Y1kR473B-XdxnZZG3akAsp6kvGxTIL1S8IG7is8mgMM"
 
 @st.cache_resource
 def init_connection():
@@ -107,13 +106,12 @@ elif st.session_state["authentication_status"] == True:
                 c_name = st.text_input("업체명", placeholder="예: (주)인슈테크")
             with col2:
                 c_score = st.number_input("신용점수", min_value=0, max_value=1000, value=850)
-                c_sales = 리포트 = st.number_input("월 매출 (만원 단위)", min_value=0, step=100)
+                c_sales = st.number_input("월 매출 (만원 단위)", min_value=0, step=100)
             c_comment = st.text_area("센터장님 전용 전략 코멘트")
             
             if st.form_submit_button("DB 저장 및 계정 생성"):
                 if c_id and c_name:
                     try:
-                        # 1. users 테이블에 계정 자동 생성 (초기 비밀번호 1234)
                         temp_hash = bcrypt.hashpw('1234'.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
                         supabase.table('users').upsert({
                             'username': c_id, 
@@ -122,7 +120,6 @@ elif st.session_state["authentication_status"] == True:
                             'role': 'client'
                         }).execute()
 
-                        # 2. client_data 테이블에 리포트 저장
                         supabase.table('client_data').upsert({
                             'client_id': c_id, 
                             'company_name': c_name,
@@ -131,31 +128,59 @@ elif st.session_state["authentication_status"] == True:
                             'strategy_comment': c_comment
                         }).execute()
 
-                        st.success(f"✅ [{c_name}] 대표님의 데이터 저장 및 로그인 계정(초기 비밀번호: 1234)이 한 번에 자동 생성되었습니다!")
+                        st.success(f"✅ [{c_name}] 대표님의 데이터 저장 및 로그인 계정이 생성되었습니다! (초기비번: 1234)")
                         st.balloons()
                     except Exception as e:
-                        st.error(f"저장 실패 (Supabase 설정을 확인하세요): {e}")
+                        st.error(f"저장 실패: {e}")
                 else:
                     st.warning("고객 ID와 업체명은 필수입니다.")
 
     # ==========================================
-    # 4-B. [고객 모드] 업체 대표님 전용
+    # 4-B. [고객 모드] 업체 대표님 전용 (그래프 추가됨!)
     # ==========================================
     else:
         st.title(f"📈 {name} 대표님 맞춤형 경영 대시보드")
+        st.caption("본 리포트는 철저한 보안 속에 본인만 열람이 가능합니다.")
+        
         try:
             res = supabase.table('client_data').select('*').eq('client_id', username).execute()
             if res.data:
                 user_data = res.data[0] 
+                
+                # 1. 핵심 숫자 요약
                 col1, col2, col3 = st.columns(3)
                 col1.metric("업체명", user_data['company_name'])
                 col2.metric("현재 신용점수", f"{user_data['credit_score']} 점")
                 col3.metric("최근 월 매출", f"{user_data['monthly_sales']:,} 만원")
                 
                 st.divider()
+                
+                # 2. 시각화 그래프 영역
+                st.subheader("📊 핵심 지표 시각화")
+                chart_col1, chart_col2 = st.columns(2)
+                
+                with chart_col1:
+                    st.write("**신용점수 달성률 (1000점 기준)**")
+                    # 신용점수를 퍼센트로 계산하여 게이지바로 표시 (최대 1.0)
+                    score_ratio = min(user_data['credit_score'] / 1000, 1.0)
+                    st.progress(score_ratio)
+                
+                with chart_col2:
+                    st.write("**월 매출 차트 (단위: 만원)**")
+                    # 간단한 막대그래프로 매출 표시
+                    sales_df = pd.DataFrame({
+                        "매출 지표": ["이번 달 매출"],
+                        "금액": [user_data['monthly_sales']]
+                    })
+                    st.bar_chart(sales_df, x="매출 지표", y="금액", color="#1f77b4")
+
+                st.divider()
+                
+                # 3. 센터장 코멘트 영역
                 st.subheader("💡 공민준 센터장의 맞춤형 경영 전략")
                 st.info(user_data['strategy_comment'])
+                
             else:
-                st.warning("발행된 리포트가 없습니다.")
+                st.warning("아직 발행된 리포트가 없습니다.")
         except:
              st.warning("데이터베이스 연동 중입니다.")
