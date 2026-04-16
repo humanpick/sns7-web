@@ -78,15 +78,15 @@ elif st.session_state["authentication_status"] == True:
     name = st.session_state["name"]
     user_role = credentials['usernames'][username]['role']
     
-    # [해결 1] 쿠키에 저장된 옛날 이름 무시하고, 무조건 실시간 DB에서 최신 이름 가져오기
+    # [해결 1] 쿠키 무시! DB에서 무조건 최신 실명 가져오기
     try:
-        user_db = supabase.table('users').select('name').eq('username', username).execute()
-        display_name = user_db.data[0]['name'] if user_db.data else name
+        user_res = supabase.table('users').select('name').eq('username', username).execute()
+        real_name = user_res.data[0]['name'] if user_res.data else name
     except:
-        display_name = name
+        real_name = name
 
     with st.sidebar:
-        st.write(f"**{display_name}**님 반갑습니다.")
+        st.write(f"**{real_name}**님 반갑습니다.")
         st.divider()
         try:
             if authenticator.reset_password(username, 'sidebar'):
@@ -120,7 +120,7 @@ elif st.session_state["authentication_status"] == True:
             col1, col2 = st.columns(2)
             with col1:
                 c_id = st.text_input("고객 ID (접속용)", placeholder="예: client_kim")
-                c_name = st.text_input("대표자 성함 (실명)", placeholder="예: 홍길동")
+                c_name = st.text_input("대표자 성함 (실명)", placeholder="예: 김대중")
             with col2:
                 c_score = st.number_input("신용점수", min_value=0, max_value=999, value=850)
                 c_sales = st.number_input("월 매출 (만원 단위)", min_value=0, max_value=50000, step=100)
@@ -146,10 +146,10 @@ elif st.session_state["authentication_status"] == True:
                         st.error(f"저장 실패: {e}")
 
     # ==========================================
-    # 4-B. [고객 모드] 업체 대표님 전용 (최종 UI 보강)
+    # 4-B. [고객 모드] 업체 대표님 전용
     # ==========================================
     else:
-        st.title(f"📈 {display_name} 대표님 맞춤형 경영 리포트")
+        st.title(f"📈 {real_name} 대표님 맞춤형 경영 리포트")
         
         try:
             res = supabase.table('client_data').select('*').eq('client_id', username).execute()
@@ -163,11 +163,9 @@ elif st.session_state["authentication_status"] == True:
                 df['created_at'] = pd.to_datetime(df['created_at']).dt.tz_localize(None)
                 df = df.sort_values('created_at')
 
-                # [해결 2] 가짜 데이터를 만드는 코드를 완전히 삭제했습니다. (데이터 1개면 1개만 출력)
+                # 가짜 데이터 생성 코드 완전 삭제 (1개면 1개만 나옴)
                 
-                # 날짜를 YYYY-MM-DD 형태로 변환
                 df['date_label'] = df['created_at'].dt.strftime('%Y-%m-%d')
-                
                 df['score_num'] = pd.to_numeric(df['credit_score'], errors='coerce').fillna(0).astype(int)
                 df['sales_num'] = pd.to_numeric(df['monthly_sales'], errors='coerce').fillna(0).astype(int)
                 
@@ -181,27 +179,27 @@ elif st.session_state["authentication_status"] == True:
                 bg_color = "#87CEEB" if safe_score > 839 else "#FFCCCC"
                 status_text = "정책자금 기준(839) 충족" if safe_score > 839 else "정책자금 기준(839) 미달"
 
-                # [해결 3] 상단 박스 높이 축소 (padding:10px) 및 글자 순서 뒤집기
+                # [해결 3] 박스 높이 축소 및 텍스트 위아래 순서 변경
                 st.markdown(f"""
                     <div style="background-color:{bg_color}; padding:10px; border-radius:10px; border: 2px solid #333; text-align:center;">
-                        <p style="color:black; font-size:16px; margin:0 0 5px 0;">
-                            <b>{display_name}</b> 대표님의 최신 신용점수는 <b>{safe_score}점</b> 입니다.
+                        <h3 style="color:black; margin:0 0 5px 0;">현재 상태: {status_text}</h3>
+                        <p style="color:black; font-size:16px; margin:0;">
+                            <b>{real_name}</b> 대표님의 최신 신용점수는 <b>{safe_score}점</b> 입니다.
                         </p>
-                        <h3 style="color:black; margin:0;">현재 상태: {status_text}</h3>
                     </div>
                 """, unsafe_allow_html=True)
                 
                 st.divider()
 
                 m1, m2, m3 = st.columns(3)
-                m1.metric("성함", display_name)
+                m1.metric("성함", real_name)
                 m2.metric("최신 신용점수", f"{safe_score} 점")
                 m3.metric("최신 월 매출액", f"{safe_sales:,} 만원")
 
                 col1, col2 = st.columns(2)
                 
-                # 명목형(:N)으로 날짜를 지정하면 1개라도 무조건 가운데에 잘 찍힙니다.
-                x_axis = alt.X('date_label:N', title='데이터 입력 날짜', axis=alt.Axis(labelAngle=0))
+                # 명목형 축 고정
+                x_axis = alt.X('date_label:N', title='데이터 입력 날짜', axis=alt.Axis(labelAngle=0, values=df['date_label'].unique().tolist()))
 
                 with col1:
                     st.subheader("🛡️ 신용점수 분석 추이")
@@ -210,11 +208,11 @@ elif st.session_state["authentication_status"] == True:
                         y=alt.Y('score_num:Q', scale=alt.Scale(domain=[0, 999]), title='신용점수 (0~999점)', axis=alt.Axis(values=[0, 200, 400, 600, 800, 999]))
                     )
                     rule_score = alt.Chart(pd.DataFrame({'y': [839]})).mark_rule(strokeDash=[5, 5], color='gray').encode(y='y:Q')
-                    
-                    # 데이터가 1개면 선은 안 그려지고 점만 예쁘게 찍힙니다.
                     line_score = base_score.mark_line(color='#ff4b4b', size=3)
                     point_score = base_score.mark_circle(color='#ff4b4b', size=150)
-                    text_score = base_score.mark_text(dy=-25, fontSize=15, fontWeight='bold', color='black').encode(text='score_str:N')
+                    
+                    # [해결 2] clip=False를 추가하여 글자가 1개라도 절대 잘리지 않게 강제함
+                    text_score = base_score.mark_text(dy=-25, fontSize=15, fontWeight='bold', color='black', clip=False).encode(text='score_str:N')
                     
                     st.altair_chart(alt.layer(rule_score, line_score, point_score, text_score).properties(height=350), use_container_width=True)
                     st.caption("※ 회색 점선: 정책자금 권장 기준선 (839점)")
@@ -227,7 +225,9 @@ elif st.session_state["authentication_status"] == True:
                     )
                     line_sales = base_sales.mark_line(color='#0068c9', size=3)
                     point_sales = base_sales.mark_circle(color='#0068c9', size=150)
-                    text_sales = base_sales.mark_text(dy=-25, fontSize=15, fontWeight='bold', color='black').encode(text='sales_str:N')
+                    
+                    # [해결 2] clip=False를 추가하여 글자가 1개라도 절대 잘리지 않게 강제함
+                    text_sales = base_sales.mark_text(dy=-25, fontSize=15, fontWeight='bold', color='black', clip=False).encode(text='sales_str:N')
                     
                     st.altair_chart(alt.layer(line_sales, point_sales, text_sales).properties(height=350), use_container_width=True)
                     st.caption("※ 차트 범위: 0원 ~ 5억 원 (50,000만 원)")
