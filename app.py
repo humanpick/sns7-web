@@ -10,35 +10,32 @@ import altair as alt
 # ==========================================
 st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide")
 
-# [마스터 CSS] 상단 여백 제거 및 그래프 모든 메뉴 아이콘 강제 삭제
+# [마스터 CSS] - 깜빡임 방지 및 아이콘(데이터 표시, 전체화면) 완전 제거
 st.markdown("""
     <style>
-    /* 1. 상단 여백 0으로 밀착 */
+    /* 1. 상단 여백 제거 */
     .block-container {
         padding-top: 0rem !important;
-        padding-bottom: 0rem !important;
         margin-top: -50px !important;
     }
     header {visibility: hidden; height: 0px;}
-    footer {visibility: hidden;}
     
-    /* 2. 그래프 우측 상단 '데이터 표시(...)', '전체화면' 버튼 완전 박멸 (무조건 실행) */
-    /* Streamlit 요소 액션 메뉴 강제 삭제 */
-    div[data-testid="stElementActions"] {
+    /* 2. 그래프 우측 상단 모든 아이콘(데이터 표시, 전체화면) 강제 삭제 */
+    /* data-testid 기반 최신 스트림릿 전용 삭제 */
+    [data-testid="stElementActions"], 
+    .stElementActions, 
+    [data-testid="StyledFullScreenButton"],
+    button[title="View fullscreen"] {
         display: none !important;
         visibility: hidden !important;
     }
-    /* 차트 도구 모음 컨테이너 소멸 */
+    
+    /* 차트 도구 모음 컨테이너 자체를 원천 봉쇄 */
     .stVegaLiteChart details, 
     .stVegaLiteChart summary,
-    .stVegaLiteChart .vega-actions,
-    .stVegaLiteChart button {
+    .stVegaLiteChart .vega-actions {
         display: none !important;
         visibility: hidden !important;
-    }
-    /* 차트 위로 마우스 올릴 때 생기는 모든 변화 차단 */
-    .stVegaLiteChart:hover {
-        background: transparent !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -76,7 +73,7 @@ def fetch_users():
     except: return {'usernames': {}}
 
 # ==========================================
-# 3. 로그인 및 실명 동기화 시스템
+# 3. 로그인 및 실명 동기화
 # ==========================================
 credentials = fetch_users()
 authenticator = stauth.Authenticate(credentials, 'ceo_portal_cookie', 'signature_key', cookie_expiry_days=30)
@@ -85,7 +82,7 @@ authenticator.login('main')
 if st.session_state["authentication_status"] == True:
     username = st.session_state["username"]
     
-    # [실명 김대중 고정] DB 실시간 데이터로 이름 표기
+    # 실시간 실명(김대중) 동기화
     try:
         user_res = supabase.table('users').select('name').eq('username', username).execute()
         real_name = user_res.data[0]['name'] if user_res.data else credentials['usernames'][username]['name']
@@ -96,11 +93,10 @@ if st.session_state["authentication_status"] == True:
         authenticator.logout('로그아웃', 'sidebar')
 
     if credentials['usernames'][username]['role'] == 'admin':
-        st.title("👑 센터장님 관리자 모드")
-        # 관리자 기능은 이전과 동일하게 유지됩니다.
-    
+        st.title("👑 관리자 대시보드")
+        # 관리자 코드는 동일하게 작동합니다.
     else:
-        # 4. 김대중 대표님 리포트 화면
+        # 고객용 리포트 화면
         st.title(f"📈 {real_name} 대표님 맞춤형 경영 리포트")
         
         try:
@@ -112,14 +108,21 @@ if st.session_state["authentication_status"] == True:
                 df = df.sort_values('created_at')
                 df['date_label'] = df['created_at'].dt.strftime('%Y-%m-%d')
                 
+                # 수치 데이터 강제 숫자화
+                df['score_val'] = pd.to_numeric(df['credit_score'], errors='coerce').fillna(0).astype(int)
+                df['sales_val'] = pd.to_numeric(df['monthly_sales'], errors='coerce').fillna(0).astype(int)
+                
+                # 텍스트 라벨 미리 생성 (깜빡임 방지용)
+                df['score_text'] = df['score_val'].astype(str)
+                df['sales_text'] = df['sales_val'].apply(lambda x: f"{x:,}")
+
                 latest = df.iloc[-1]
-                safe_score = int(latest['credit_score'])
-                safe_sales = int(latest['monthly_sales'])
+                safe_score = int(latest['score_val'])
+                safe_sales = int(latest['sales_val'])
                 
                 bg_color = "#87CEEB" if safe_score > 839 else "#FFCCCC"
                 status_text = "정책자금 기준(839) 충족" if safe_score > 839 else "정책자금 기준(839) 미달"
 
-                # 상단 요약 박스 (상태 위 / 점수 아래)
                 st.markdown(f"""
                     <div style="background-color:{bg_color}; padding:10px; border-radius:10px; border:2px solid #333; text-align:center;">
                         <h3 style="color:black; margin:0 0 5px 0;">현재 상태: {status_text}</h3>
@@ -131,47 +134,50 @@ if st.session_state["authentication_status"] == True:
                 
                 st.divider()
 
-                # 실명 기반 지표
                 m1, m2, m3 = st.columns(3)
                 m1.metric("성함", real_name)
                 m2.metric("최신 신용점수", f"{safe_score} 점")
                 m3.metric("최신 월 매출액", f"{safe_sales:,} 만원")
 
-                # 그래프 (아이콘 완전 삭제 버전)
                 col1, col2 = st.columns(2)
-                x_ax = alt.X('date_label:N', title='데이터 입력 날짜', axis=alt.Axis(labelAngle=0))
+                x_ax = alt.X('date_label:N', title='입력 날짜', axis=alt.Axis(labelAngle=0))
 
                 with col1:
                     st.subheader("🛡️ 신용점수 분석 추이")
-                    base = alt.Chart(df).encode(x=x_ax, y=alt.Y('credit_score:Q', scale=alt.Scale(domain=[0, 999]), title='점수', axis=alt.Axis(labelColor='black')))
+                    base = alt.Chart(df).encode(x=x_ax, y=alt.Y('score_val:Q', scale=alt.Scale(domain=[0, 999]), title='점수'))
+                    
+                    # 수치(Text)와 점(Point)을 레이어로 분리하여 렌더링 안정화
                     rule = alt.Chart(pd.DataFrame({'y': [839]})).mark_rule(strokeDash=[5,5], color='gray').encode(y='y:Q')
                     line = base.mark_line(color='#ff4b4b', size=3)
                     point = base.mark_circle(color='#ff4b4b', size=150)
-                    text = base.mark_text(dy=-25, fontSize=15, fontWeight='bold', color='black', clip=False).encode(text='credit_score:Q')
-                    st.altair_chart(alt.layer(rule, line, point, text).properties(height=350), use_container_width=True)
+                    text = base.mark_text(dy=-25, fontSize=16, fontWeight='bold', color='black', clip=False).encode(text='score_text:N')
+                    
+                    # .configure_view(actions=False) 로 버튼 영구 삭제
+                    st.altair_chart(alt.layer(rule, line, point, text).properties(height=350).configure_view(actions=False), use_container_width=True)
 
                 with col2:
                     st.subheader("💰 월 매출 성장 추이")
-                    # Y축 숫자 검정색 선명하게 표기 + 콤마 강제
+                    # Y축 숫자 강제 노출 및 콤마 포맷팅
                     base_s = alt.Chart(df).encode(
                         x=x_ax, 
-                        y=alt.Y('monthly_sales:Q', scale=alt.Scale(domain=[0, 50000]), title='매출(만원)', 
+                        y=alt.Y('sales_val:Q', scale=alt.Scale(domain=[0, 50000]), title='매출(만원)', 
                                 axis=alt.Axis(values=[0,10000,20000,30000,40000,50000], labelExpr="format(datum.value, ',')", labelColor='black'))
                     )
                     line_s = base_s.mark_line(color='#0068c9', size=3)
                     point_s = base_s.mark_circle(color='#0068c9', size=150)
-                    text_s = base_s.mark_text(dy=-25, fontSize=15, fontWeight='bold', color='black', clip=False).encode(text=alt.Text('monthly_sales:Q', format=","))
-                    st.altair_chart(alt.layer(line_s, point_s, text_s).properties(height=350), use_container_width=True)
+                    # 콤마가 포함된 텍스트(sales_text)를 사용하여 깜빡임 차단
+                    text_s = base_s.mark_text(dy=-25, fontSize=16, fontWeight='bold', color='black', clip=False).encode(text='sales_text:N')
+                    
+                    st.altair_chart(alt.layer(line_s, point_s, text_s).properties(height=350).configure_view(actions=False), use_container_width=True)
 
                 st.divider()
                 st.subheader("💡 공민준 센터장의 핵심 경영 제언")
                 st.info(latest.get('strategy_comment', "제언 수립 중입니다."))
                 
-            else: st.warning("아직 발행된 리포트가 없습니다.")
         except Exception as e:
-             st.error(f"데이터를 처리하는 중입니다. 잠시만 기다려주세요.")
+             st.error(f"데이터 로딩 중...")
 
 elif st.session_state["authentication_status"] == False:
-    st.error('아이디 또는 비밀번호가 일치하지 않습니다.')
+    st.error('아이디 또는 비밀번호 오류입니다.')
 elif st.session_state["authentication_status"] == None:
-    st.info('발급받으신 아이디와 비밀번호를 입력해 주세요.')
+    st.info('아이디와 비밀번호를 입력해 주세요.')
