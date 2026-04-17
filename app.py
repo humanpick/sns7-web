@@ -6,17 +6,15 @@ import altair as alt
 import bcrypt
 
 # ==========================================
-# 1. 디자인 시스템 및 변수 정의 (UI 절대 고정)
+# 1. 디자인 시스템 및 변수 (절대 고정)
 # ==========================================
 st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide")
 
-# 💡 모든 UI 변수를 최상단에 정의합니다.
 NAVY = "#001F3F"
 GOLD = "#D4AF37"
 BG_COLOR = "#F4F7F9"
 BORDER = "#D1D9E0"
 
-# 프리미엄 UI 스타일 시트 주입 (민준님 지정 스탠다드)
 st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;700&display=swap');
@@ -33,7 +31,7 @@ st.markdown(f"""
     [data-testid="stSidebar"] {{ background-color: {NAVY} !important; }}
     [data-testid="stSidebar"] * {{ color: white !important; }}
 
-    /* 지표 카드 디자인 */
+    /* 지표 카드: SNS7 마스터 스탠다드 */
     .metric-card-v23 {{
         background-color: #FFFFFF !important;
         padding: 22px !important;
@@ -88,11 +86,11 @@ def fetch_creds():
 if 'creds' not in st.session_state:
     st.session_state.creds = fetch_creds()
 
-authenticator = stauth.Authenticate(st.session_state.creds, 'ceo_portal_v25', 'key_v25', 30)
+authenticator = stauth.Authenticate(st.session_state.creds, 'ceo_portal_v26', 'key_v26', 30)
 authenticator.login('main')
 
 # ------------------------------------------
-# 💡 [신규 기능] 전략 자동 생성 AI 로직
+# 💡 [AI 엔진] 전략 자동 생성 로직
 # ------------------------------------------
 def generate_strategy(score, sales):
     if score >= 900: sc_text = "최상위권 신용도를 유지 중입니다."
@@ -113,6 +111,9 @@ def generate_strategy(score, sales):
 
     return f"{sc_text}\n\n{sl_text}\n\n💡 결론: {conclusion}\n\n추가적인 상세 실행 방안은 다음 대면 컨설팅에서 논의하겠습니다."
 
+# ==========================================
+# 3. 메인 화면 출력
+# ==========================================
 if st.session_state.get("authentication_status"):
     username = st.session_state["username"]
     u_info = st.session_state.creds['usernames'].get(username, {})
@@ -124,93 +125,83 @@ if st.session_state.get("authentication_status"):
         authenticator.logout('시스템 로그아웃', 'sidebar')
 
     # ------------------------------------------
-    # 👑 [ADMIN] 관리자 데이터 센터 
+    # 👑 [ADMIN] 관리자 데이터 센터
     # ------------------------------------------
     if u_info.get('role') == 'admin':
         st.title("👑 관리자 데이터 센터")
-        t1, t2, t3 = st.tabs(["📝 리포트 발행", "👥 고객 계정 관리", "⚙️ 데이터 수정 및 삭제"])
+        t1, t2, t3 = st.tabs(["📝 리포트 발행", "👥 고객 관리", "⚙️ 이력 관리"])
         
         with t1:
-            st.subheader("신규 데이터 누적 입력")
+            st.subheader("신규 데이터 누적 입력 및 전략 발행")
             v_list = [u for u in st.session_state.creds['usernames'] if st.session_state.creds['usernames'][u].get('role') != 'admin']
             if not v_list: st.info("고객을 먼저 등록해 주세요.")
             else:
                 sel_id = st.selectbox("대상 고객 선택", v_list, format_func=lambda x: f"{st.session_state.creds['usernames'][x]['name']} ({x})")
                 
-                # 💡 세션 상태에 자동 생성 문구 저장
-                if 'auto_comment' not in st.session_state:
-                    st.session_state.auto_comment = ""
+                # 💡 [해결] 빈칸 저장 방지를 위한 세션 키 초기화
+                if 'strat_text' not in st.session_state:
+                    st.session_state.strat_text = ""
                 
-                with st.form("input_v25"):
+                with st.form("input_v26"):
                     comp = st.text_input("분석 업체명")
                     c1, c2 = st.columns(2)
                     sc = c1.number_input("신용점수", 500, 999, 850)
                     sa = c2.number_input("월 매출액(만원)", 0, 100000, 1300)
                     
-                    cmt = st.text_area("공민준 센터장의 경영 전략 제시", value=st.session_state.auto_comment, height=150)
+                    st.write("---")
+                    st.write("💡 **[순서 안내]** 아래 **1번** 버튼으로 전략을 생성한 후, **2번** 버튼으로 최종 저장하세요.")
                     
+                    # session_state와 안전하게 동기화되는 텍스트 박스
+                    cmt = st.text_area("공민준 센터장의 경영 전략 제시", key="strat_text", height=150)
+                    
+                    # 💡 [해결] 버튼의 역할을 확실하게 분리
                     col_btn1, col_btn2 = st.columns(2)
-                    auto_btn = col_btn1.form_submit_button("💡 전략 자동 생성")
-                    submit_btn = col_btn2.form_submit_button("데이터 추가 및 발행")
-                    
-                    if auto_btn:
-                        st.session_state.auto_comment = generate_strategy(sc, sa)
-                        st.rerun()
+                    auto_btn = col_btn1.form_submit_button("💡 1. 전략 자동 생성 (AI 비서)")
+                    save_btn = col_btn2.form_submit_button("💾 2. 최종 저장 및 리포트 발행")
 
-                    if submit_btn:
-                        supabase.table('client_data').insert({
-                            "client_id": sel_id, "company_name": comp,
-                            "credit_score": str(sc), "monthly_sales": str(sa), "strategy_comment": cmt
-                        }).execute()
-                        st.session_state.auto_comment = "" # 전송 후 초기화
-                        st.success(f"{comp} 데이터가 성공적으로 저장되었습니다.")
-                        st.rerun()
+                # 폼 바깥에서 저장 및 생성 로직 처리 (빈칸 버그 원천 차단)
+                if auto_btn:
+                    st.session_state.strat_text = generate_strategy(sc, sa)
+                    st.rerun()
 
+                if save_btn:
+                    final_cmt = st.session_state.strat_text # 현재 텍스트 박스의 값을 정확히 가져옵니다.
+                    supabase.table('client_data').insert({
+                        "client_id": sel_id, "company_name": comp,
+                        "credit_score": str(sc), "monthly_sales": str(sa), "strategy_comment": final_cmt
+                    }).execute()
+                    st.session_state.strat_text = "" # 전송 후 텍스트 박스 초기화
+                    st.success(f"{comp} 리포트가 성공적으로 저장 및 발행되었습니다!")
+                    st.rerun()
+
+        # [T2: 계정 관리, T3: 이력 관리 로직]
         with t2:
-            st.subheader("신규 고객 등록")
-            with st.form("reg_v25"):
+            with st.form("reg_v26"):
                 r_id = st.text_input("아이디")
                 r_pw = st.text_input("비밀번호", type="password")
                 r_name = st.text_input("성함")
-                if st.form_submit_button("계정 생성"):
+                if st.form_submit_button("등록 완료"):
                     hpw = bcrypt.hashpw(r_pw.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
                     supabase.table('users').insert({"username": r_id, "name": r_name, "password": hpw, "role": "viewer"}).execute()
                     st.session_state.creds = fetch_creds()
-                    st.success("고객 등록 완료")
+                    st.success("계정이 생성되었습니다.")
                     st.rerun()
             st.divider()
             cl_df = pd.DataFrame([{"ID": k, "이름": v['name']} for k, v in st.session_state.creds['usernames'].items() if v['role'] != 'admin'])
             if not cl_df.empty: st.table(cl_df)
 
         with t3:
-            st.subheader("📜 데이터 이력 수정 및 삭제")
-            st.info("💡 발행된 데이터의 수치를 변경하거나 잘못된 기록을 삭제할 수 있습니다.")
+            st.info("💡 발행된 데이터의 수치를 변경하거나 삭제할 수 있습니다.")
             raw_res = supabase.table('client_data').select('*').order('created_at', desc=True).execute()
             if raw_res.data:
-                history_df = pd.DataFrame(raw_res.data)
-                
                 edited_df = st.data_editor(
-                    history_df,
-                    column_config={
-                        "client_id": "고객ID",
-                        "company_name": "업체명",
-                        "credit_score": "신용점수",
-                        "monthly_sales": "월매출",
-                        "strategy_comment": "전략 제시",
-                        "created_at": "발행일"
-                    },
-                    disabled=["created_at", "client_id"],
-                    num_rows="dynamic",
-                    key="history_editor_v25",
-                    use_container_width=True
+                    pd.DataFrame(raw_res.data),
+                    column_config={"client_id":"ID", "company_name":"업체", "credit_score":"점수", "monthly_sales":"매출", "strategy_comment":"전략", "created_at":"발행일"},
+                    disabled=["created_at", "client_id"], num_rows="dynamic", use_container_width=True
                 )
-                
-                st.warning("데이터 수정 기능은 추후 확장 가능하도록 설계되었습니다. 현재는 목록 확인 및 행 삭제(선택 후 Del 키)가 가능합니다.")
-            else:
-                st.write("표시할 데이터가 없습니다.")
 
     # ------------------------------------------
-    # 📈 [VIEWER] 하이엔드 경영 리포트 (V23 스탠다드 완전 보존)
+    # 📈 [VIEWER] 하이엔드 경영 리포트 (민준님 지정 UI 100% 보존)
     # ------------------------------------------
     else:
         try:
@@ -260,11 +251,16 @@ if st.session_state.get("authentication_status"):
                     labels_s = points_s.mark_text(dy=25, fontSize=13, fontWeight='bold', color='#3498DB').encode(text='매출_표기:N')
                     st.altair_chart((area_s + points_s + labels_s).properties(height=350), use_container_width=True)
 
+                # 💡 [방어 코드] 만약 과거의 빈칸 데이터가 불러와진 경우 안내 메시지 출력
+                strat_text = latest.get('strategy_comment', '')
+                if pd.isna(strat_text) or str(strat_text).strip() == "":
+                    strat_text = "센터장의 맞춤형 경영 전략을 분석 및 작성 중입니다."
+
                 st.write("")
                 st.markdown(f"""
                     <div style="background-color: white; border: 2px solid {BORDER}; padding: 35px; border-radius: 12px;">
                         <h3 style="color: {NAVY}; margin-top: 0; border-bottom: 2px solid {GOLD}; display: inline-block; padding-bottom: 5px;">💡 공민준 센터장의 경영 전략 제시</h3>
-                        <p style="color: #333; line-height: 1.9; white-space: pre-wrap; font-size: 1.1rem; margin-top: 20px;">{latest['strategy_comment']}</p>
+                        <p style="color: #333; line-height: 1.9; white-space: pre-wrap; font-size: 1.1rem; margin-top: 20px;">{strat_text}</p>
                     </div>
                 """, unsafe_allow_html=True)
 
