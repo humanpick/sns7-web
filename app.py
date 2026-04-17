@@ -85,7 +85,7 @@ def fetch_creds():
 if 'creds' not in st.session_state:
     st.session_state.creds = fetch_creds()
 
-authenticator = stauth.Authenticate(st.session_state.creds, 'ceo_portal_v28', 'key_v28', 30)
+authenticator = stauth.Authenticate(st.session_state.creds, 'ceo_portal_v29', 'key_v29', 30)
 authenticator.login('main')
 
 # ------------------------------------------
@@ -128,15 +128,14 @@ if st.session_state.get("authentication_status"):
     # ------------------------------------------
     if u_info.get('role') == 'admin':
         st.title("👑 관리자 데이터 센터")
-        t1, t2, t3 = st.tabs(["📝 리포트 발행", "👥 고객 관리", "⚙️ 이력 관리"])
+        t1, t2, t3 = st.tabs(["📝 리포트 발행", "👥 고객 관리", "⚙️ 이력 관리 (삭제/수정)"])
         
         with t1:
             st.subheader("신규 데이터 누적 입력 및 전략 발행")
             
-            # 성공 메시지를 안전하게 띄우기 위한 장치
             if st.session_state.get('save_success_msg'):
                 st.success(st.session_state.save_success_msg)
-                st.session_state.save_success_msg = "" # 한 번 띄우고 초기화
+                st.session_state.save_success_msg = "" 
 
             v_list = [u for u in st.session_state.creds['usernames'] if st.session_state.creds['usernames'][u].get('role') != 'admin']
             if not v_list: 
@@ -152,7 +151,6 @@ if st.session_state.get("authentication_status"):
                 st.write("---")
                 st.write("💡 **[순서 안내]** 아래 **1번** 버튼으로 전략을 생성한 후, **2번** 버튼으로 최종 저장하세요.")
                 
-                # 1. 자동 생성 버튼
                 if st.button("💡 1. 전략 자동 생성 (AI 비서)"):
                     st.session_state.strat_text = generate_strategy(sc, sa)
                     st.rerun()
@@ -162,13 +160,11 @@ if st.session_state.get("authentication_status"):
                 
                 cmt = st.text_area("공민준 센터장의 경영 전략 제시", key="strat_text", height=150)
                 
-                # 2. 최종 저장 버튼 (에러 방어막 적용)
                 if st.button("💾 2. 최종 저장 및 리포트 발행"):
                     if not comp:
                         st.warning("분석 업체명을 입력해 주세요.")
                     else:
                         try:
-                            # 💡 [핵심 해결] str(sc) 변환을 제거하여 DB와의 타입 충돌(APIError) 원천 봉쇄
                             supabase.table('client_data').insert({
                                 "client_id": sel_id, 
                                 "company_name": comp,
@@ -177,17 +173,15 @@ if st.session_state.get("authentication_status"):
                                 "strategy_comment": cmt
                             }).execute()
                             
-                            # 성공 메시지 예약 및 입력창 초기화
                             st.session_state.save_success_msg = f"{comp} 리포트가 성공적으로 발행되었습니다!"
                             if 'strat_text' in st.session_state:
-                                del st.session_state.strat_text # Streamlit 에러 방지용 안전 삭제
+                                del st.session_state.strat_text
                             st.rerun()
                         except Exception as e:
-                            # 💡 에러 발생 시 앱이 죽지 않고 붉은 글씨로 원인을 알려줌
                             st.error(f"데이터베이스 저장 중 오류가 발생했습니다: {e}")
 
         with t2:
-            with st.form("reg_v28"):
+            with st.form("reg_v29"):
                 r_id = st.text_input("아이디")
                 r_pw = st.text_input("비밀번호", type="password")
                 r_name = st.text_input("성함")
@@ -199,26 +193,71 @@ if st.session_state.get("authentication_status"):
                         st.success("계정이 생성되었습니다.")
                         st.rerun()
                     except Exception as e:
-                        st.error(f"계정 생성 오류 (아이디 중복 등): {e}")
+                        st.error(f"계정 생성 오류: {e}")
             st.divider()
             cl_df = pd.DataFrame([{"ID": k, "이름": v['name']} for k, v in st.session_state.creds['usernames'].items() if v['role'] != 'admin'])
             if not cl_df.empty: st.table(cl_df)
 
+        # 💡 [핵심 업데이트] 영구 삭제 및 수정 기능 추가
         with t3:
-            st.info("💡 발행된 데이터의 수치를 변경하거나 삭제할 수 있습니다.")
+            st.info("💡 에디터에서 행을 지우거나 수정한 뒤, 반드시 아래의 **[DB 영구 반영]** 버튼을 눌러야 실제 서버에 적용됩니다.")
             try:
                 raw_res = supabase.table('client_data').select('*').order('created_at', desc=True).execute()
                 if raw_res.data:
+                    history_df = pd.DataFrame(raw_res.data)
+                    
                     edited_df = st.data_editor(
-                        pd.DataFrame(raw_res.data),
-                        column_config={"client_id":"ID", "company_name":"업체", "credit_score":"점수", "monthly_sales":"매출", "strategy_comment":"전략", "created_at":"발행일"},
-                        disabled=["created_at", "client_id"], num_rows="dynamic", use_container_width=True
+                        history_df,
+                        column_config={
+                            "id": None, # 내부 id는 가림 처리
+                            "client_id": "고객ID", 
+                            "company_name": "업체", 
+                            "credit_score": "점수", 
+                            "monthly_sales": "매출", 
+                            "strategy_comment": "전략", 
+                            "created_at": "발행일"
+                        },
+                        disabled=["created_at", "client_id"], 
+                        num_rows="dynamic", 
+                        use_container_width=True
                     )
+
+                    st.write("")
+                    # 동기화 버튼
+                    if st.button("🗑️ 변경/삭제사항 DB에 영구 반영하기"):
+                        # 1. 삭제된 행 추적 및 DB에서 영구 삭제
+                        original_times = set(history_df['created_at'].tolist())
+                        current_times = set(edited_df['created_at'].tolist())
+                        deleted_times = original_times - current_times
+                        
+                        for d_time in deleted_times:
+                            # 고유값인 발행시간(created_at)을 기준으로 타겟팅하여 삭제
+                            supabase.table('client_data').delete().eq('created_at', d_time).execute()
+                        
+                        # 2. 수정된 데이터 추적 및 DB 업데이트 (옵션)
+                        for idx, row in edited_df.iterrows():
+                            # 데이터가 변경된 경우만 업데이트
+                            orig_row = history_df[history_df['created_at'] == row['created_at']].iloc[0]
+                            if (str(row['company_name']) != str(orig_row['company_name']) or
+                                str(row['credit_score']) != str(orig_row['credit_score']) or
+                                str(row['monthly_sales']) != str(orig_row['monthly_sales']) or
+                                str(row['strategy_comment']) != str(orig_row['strategy_comment'])):
+                                
+                                supabase.table('client_data').update({
+                                    "company_name": row['company_name'],
+                                    "credit_score": int(row['credit_score']),
+                                    "monthly_sales": int(row['monthly_sales']),
+                                    "strategy_comment": str(row['strategy_comment'])
+                                }).eq('created_at', row['created_at']).execute()
+
+                        st.success("데이터베이스 원본 동기화가 완벽하게 완료되었습니다!")
+                        st.rerun()
+
             except Exception as e:
-                st.error(f"이력 로딩 오류: {e}")
+                st.error(f"이력 관리 시스템 오류: {e}")
 
     # ------------------------------------------
-    # 📈 [VIEWER] 하이엔드 경영 리포트 (민준님 지정 UI 보존)
+    # 📈 [VIEWER] 하이엔드 경영 리포트 (민준님 스탠다드 100% 보존)
     # ------------------------------------------
     else:
         try:
