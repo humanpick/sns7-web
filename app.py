@@ -90,7 +90,7 @@ authenticator = stauth.Authenticate(
 
 # 사이드바 불침번 세우기 (빈 상자 방지)
 with st.sidebar:
-    st.write("### 💼 SNS7 CEO 포털")
+    st.write("### 💼 sns7 CEO 경영관리")
     st.markdown("<p style='font-size:0.9rem; color:#A0AAB5;'>프리미엄 비즈니스 분석 시스템</p>", unsafe_allow_html=True)
     st.divider()
 
