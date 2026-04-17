@@ -9,7 +9,7 @@ from datetime import datetime, time
 # ==========================================
 # [불변 메모리] SNS7 하이엔드 UI 표준 각인
 # ==========================================
-st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="CEO BUSINESS", page_icon="💼", layout="wide", initial_sidebar_state="expanded")
 
 NAVY = "#001F3F"
 GOLD = "#D4AF37"
