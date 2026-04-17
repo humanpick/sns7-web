@@ -7,9 +7,9 @@ import bcrypt
 from datetime import datetime, time
 
 # ==========================================
-# [불변 메모리] SNS7 하이엔드 UI 표준 각인
+# [불변 메모리] SNS7 하이엔드 UI 표준 (V23-Fixed)
 # ==========================================
-st.set_page_config(page_title="CEO BUSINESS", page_icon="💼", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide", initial_sidebar_state="expanded")
 
 NAVY = "#001F3F"
 GOLD = "#D4AF37"
@@ -51,7 +51,7 @@ st.markdown(f"""
     [data-testid="stHeader"] {{ background: rgba(0,0,0,0) !important; }}
     [data-testid="stToolbar"] {{ visibility: hidden !important; }}
 
-    /* 명품 메트릭 카드 */
+    /* 명품 메트릭 카드 및 스케줄 아이템 */
     .metric-card-v23 {{
         background-color: #FFFFFF !important; padding: 22px !important; border-radius: 12px !important;
         border: 2px solid {BORDER} !important; box-shadow: 0 4px 6px rgba(0,0,0,0.02) !important; margin-bottom: 20px !important;
@@ -59,7 +59,6 @@ st.markdown(f"""
     .label-v23 {{ font-size: 0.95rem !important; color: #666 !important; font-weight: 700 !important; border-left: 4px solid {GOLD}; padding-left: 10px; margin-bottom: 10px; }}
     .value-v23 {{ font-size: 1.8rem !important; font-weight: 700 !important; color: {NAVY} !important; }}
     .stButton>button {{ background-color: {GOLD} !important; color: {NAVY} !important; border: none !important; font-weight: 700 !important; padding: 0.6rem 2.5rem !important; border-radius: 6px !important; }}
-    
     .sch-item {{ background: white; padding: 15px; border-radius: 8px; border-left: 5px solid {GOLD}; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); color: #333; }}
     </style>
 """, unsafe_allow_html=True)
@@ -92,7 +91,15 @@ def get_client_display_map():
 
 if 'creds' not in st.session_state: st.session_state.creds = fetch_creds()
 
-authenticator = stauth.Authenticate(st.session_state.creds, 'ceo_portal_v45', 'key_v45', 30)
+# 💡 [핵심] 자동 로그인을 위한 쿠키 설정 추가
+authenticator = stauth.Authenticate(
+    st.session_state.creds,
+    'sns7_ceo_cookie', # 쿠키 이름
+    'sns7_signature_key', # 서명 키
+    30 # 쿠키 유효 기간 (30일)
+)
+
+# 로그인 화면 출력 (자동 로그인 체크박스가 포함됩니다)
 authenticator.login('main')
 
 def generate_strategy(score, sales):
@@ -101,7 +108,7 @@ def generate_strategy(score, sales):
     return f"현재 신용점수 {score}점, 매출액 {sales}만원 기반 센터장 정밀 분석입니다.\n\n💡 결론: {conclusion}\n\n상세 실행 방안은 다음 컨설팅에서 논의하겠습니다."
 
 # ==========================================
-# 4. 메인 화면 출력 (완전 복구 모드)
+# 4. 메인 화면 출력
 # ==========================================
 if st.session_state.get("authentication_status"):
     username = st.session_state["username"]
@@ -112,10 +119,10 @@ if st.session_state.get("authentication_status"):
         st.write(f"### 💼 CEO 전용 채널")
         st.write(f"**{real_name}**님 환영합니다.")
         st.divider()
-        if st.button("🚪 시스템 로그아웃"):
-            authenticator.logout('로그아웃', 'sidebar')
+        # 로그아웃 버튼 (클릭 시 쿠키도 함께 삭제됩니다)
+        authenticator.logout('시스템 로그아웃', 'sidebar')
 
-    # 👑 [ADMIN] 관리자 데이터 센터 (모든 기능 100% 복구)
+    # 👑 [ADMIN] 관리자 데이터 센터
     if u_info.get('role') == 'admin':
         st.title("👑 관리자 데이터 센터")
         t1, t2, t3, t4 = st.tabs(["📝 리포트 발행", "👥 고객 관리", "⚙️ 이력 관리", "📅 스케줄 관리"])
@@ -152,7 +159,7 @@ if st.session_state.get("authentication_status"):
                         st.session_state.creds = fetch_creds()
                         st.success("비밀번호가 변경되었습니다.")
             st.divider()
-            with st.form("reg_v45"):
+            with st.form("reg_v46"):
                 r_id, r_pw, r_name = st.text_input("아이디"), st.text_input("초기비번", type="password"), st.text_input("성함")
                 if st.form_submit_button("신규 계정 생성"):
                     hpw = bcrypt.hashpw(r_pw.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
@@ -161,7 +168,7 @@ if st.session_state.get("authentication_status"):
                     st.rerun()
 
         with t3:
-            st.subheader("⚙️ 이력 동기화 관리 (삭제/수정)")
+            st.subheader("⚙️ 이력 동기화 관리")
             raw_res = supabase.table('client_data').select('*').order('created_at', desc=True).execute()
             if raw_res.data:
                 history_df = pd.DataFrame(raw_res.data)
@@ -173,7 +180,7 @@ if st.session_state.get("authentication_status"):
                         supabase.table('client_data').delete().eq('created_at', d_t).execute()
                     for _, row in edited_df.iterrows():
                         supabase.table('client_data').update({"company_name": row['company_name'], "credit_score": int(row['credit_score']), "monthly_sales": int(row['monthly_sales']), "strategy_comment": str(row['strategy_comment'])}).eq('created_at', row['created_at']).execute()
-                    st.success("데이터베이스 동기화 완료")
+                    st.success("동기화 완료")
                     st.rerun()
 
         with t4:
