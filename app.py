@@ -91,7 +91,7 @@ def get_client_display_map():
 
 if 'creds' not in st.session_state: st.session_state.creds = fetch_creds()
 
-# 💡 [핵심 패치] 자동 로그인 변수 명확화
+# 자동 로그인 쿠키 설정
 authenticator = stauth.Authenticate(
     st.session_state.creds,
     'sns7_ceo_cookie', # 쿠키 이름
@@ -99,7 +99,8 @@ authenticator = stauth.Authenticate(
     30 # 쿠키 유지 일수 (30일)
 )
 
-name, authentication_status, username = authenticator.login('로그인', 'main')
+# 💡 [버그 해결] 불필요한 '로그인' 텍스트를 제거하여 에러 방지
+name, authentication_status, username = authenticator.login('main')
 
 def generate_strategy(score, sales):
     if score >= 840: conclusion = "저금리 정책자금 확보의 최적기입니다."
@@ -157,7 +158,7 @@ if authentication_status:
                         st.session_state.creds = fetch_creds()
                         st.success("비밀번호가 변경되었습니다.")
             st.divider()
-            with st.form("reg_v47"):
+            with st.form("reg_v48"):
                 r_id, r_pw, r_name = st.text_input("아이디"), st.text_input("초기비번", type="password"), st.text_input("성함")
                 if st.form_submit_button("신규 계정 생성"):
                     hpw = bcrypt.hashpw(r_pw.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
@@ -260,4 +261,4 @@ elif authentication_status is False:
 
 elif authentication_status is None:
     # ------------------ 로그인 전 화면 ------------------
-    st.info('💡 **[관리자 안내]**\n자동 로그인을 위해 반드시 **Remember me** 체크박스를 클릭해 주세요. 만약 브라우저를 껐다 켰을 때 유지가 안 된다면, 로컬 네트워크 보안 정책 때문일 수 있습니다. (향후 정식 도메인을 연결하면 완벽하게 해결됩니다)')
+    st.info('💡 **[관리자 안내]**\n자동 로그인을 위해 반드시 **Remember me** 체크박스를 클릭해 주세요. (로컬 환경에서는 보안상 해제될 수 있습니다)')
