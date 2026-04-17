@@ -5,6 +5,7 @@ import pandas as pd
 import altair as alt
 import bcrypt
 from datetime import datetime, time
+import plotly.graph_objects as go  # [추가] 게이지 차트를 위한 라이브러리
 
 # ==========================================
 # [불변 메모리] SNS7 하이엔드 UI 표준 (V23-Fixed)
@@ -17,7 +18,7 @@ BG_COLOR = "#F4F7F9"
 BORDER = "#D1D9E0"
 
 # ==========================================
-# 2. UI/CSS 패치 (사이드바 황금색 버튼 유지)
+# 2. UI/CSS 패치
 # ==========================================
 st.markdown(f"""
     <style>
@@ -49,11 +50,56 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ------------------------------------------
+# [추가] 신용점수 게이지 차트 생성 함수
+# ------------------------------------------
+def draw_credit_gauge(score):
+    # 구간별 텍스트 및 컬러 로직 (710, 745, 839 기준)
+    if 710 <= score <= 839:
+        status_text = "양방향 수혜 골든존"
+        bar_color = GOLD 
+    elif score > 839:
+        status_text = "우량 기업 전용 지원"
+        bar_color = NAVY
+    elif score >= 710:
+        status_text = "일반 정책자금권"
+        bar_color = "#3498DB"
+    else:
+        status_text = "신용 집중 관리 요망"
+        bar_color = "#E74C3C"
+
+    fig = go.Figure(go.Indicator(
+        mode = "gauge+number",
+        value = score,
+        domain = {'x': [0, 1], 'y': [0, 1]},
+        title = {'text': f"<span style='font-size:1.1em;color:{NAVY}'><b>현재 상태: {status_text}</b></span><br><span style='font-size:0.8em;color:gray'>NICE 평가정보 기준</span>"},
+        number = {'font': {'size': 45, 'color': bar_color, 'weight': 'bold'}, 'suffix': "점"},
+        gauge = {
+            'axis': {'range': [300, 1000], 'tickwidth': 1, 'tickcolor': BORDER},
+            'bar': {'color': bar_color},
+            'bgcolor': "white",
+            'borderwidth': 2,
+            'bordercolor': BORDER,
+            'steps': [
+                {'range': [300, 710], 'color': "#F8F9FA"},
+                {'range': [710, 745], 'color': "#E8F0F8"},
+                {'range': [745, 839], 'color': "#FFF9E6"}, # 골든존 배경 하이라이트
+                {'range': [839, 1000], 'color': "#E6EDF5"}
+            ],
+            'threshold': {
+                'line': {'color': "#E74C3C", 'width': 3},
+                'thickness': 0.75,
+                'value': score
+            }
+        }
+    ))
+    fig.update_layout(height=320, margin=dict(l=20, r=20, t=60, b=20), paper_bgcolor="rgba(0,0,0,0)", font={'family': "Pretendard"})
+    return fig
+
+# ------------------------------------------
 # 3. 데이터 엔진 코어
 # ------------------------------------------
 SUPABASE_URL = "https://pjpnaqyyzlkolnfvlpps.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBqcG5hcXl5emxrb2xuZnZscHBzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxOTEwNzgsImV4cCI6MjA5MTc2NzA3OH0.Y1kR473B-XdxnZZG3akAsp6kvGxTIL1S8IG7is8mgMM"
-
 
 @st.cache_resource
 def init_supabase():
@@ -76,7 +122,6 @@ def get_client_display_map():
 
 if 'creds' not in st.session_state: st.session_state.creds = fetch_creds()
 
-# 💡 [핵심 해결책] 자동 로그인 쿠키 설정을 변수로 분리하여 안정성 극대화
 cookie_name = "sns7_ceo_cookie"
 cookie_key = "sns7_secure_signature_key_2026"
 cookie_expiry_days = 30
@@ -88,18 +133,17 @@ authenticator = stauth.Authenticate(
     cookie_expiry_days
 )
 
-# 사이드바 불침번 세우기 (빈 상자 방지)
 with st.sidebar:
     st.write("### 💼 SNS7 CEO 경영관리")
     st.markdown("<p style='font-size:0.9rem; color:#A0AAB5;'>프리미엄 비즈니스 분석 시스템</p>", unsafe_allow_html=True)
     st.divider()
 
-# 로그인 폼 렌더링
 authenticator.login('main')
 
 def generate_strategy(score, sales):
-    if score >= 840: conclusion = "저금리 정책자금 확보의 최적기입니다."
-    else: conclusion = "신용 관리를 통한 자금 조달 리포지셔닝이 필요합니다."
+    if 710 <= score <= 839: conclusion = "저신용 자금과 우량 보증을 동시 공략할 수 있는 양방향 수혜의 골든타임입니다."
+    elif score >= 840: conclusion = "1금융권 우량 정책자금 및 협약보증 확보의 최적기입니다."
+    else: conclusion = "신용 관리를 통한 자금 조달 리포지셔닝이 우선적으로 필요합니다."
     return f"현재 신용점수 {score}점, 매출액 {sales}만원 기반 센터장 정밀 분석입니다.\n\n💡 결론: {conclusion}\n\n상세 실행 방안은 다음 컨설팅에서 논의하겠습니다."
 
 # ==========================================
@@ -129,7 +173,7 @@ if st.session_state.get("authentication_status"):
                 sel_id = st.selectbox("대상 고객 선택", v_list, format_func=lambda x: client_map.get(x, x))
                 comp = st.text_input("분석 업체명 (최신화)")
                 c1, c2 = st.columns(2)
-                sc = c1.number_input("신용점수", 500, 999, 850)
+                sc = c1.number_input("신용점수", 300, 1000, 807)
                 sa = c2.number_input("월 매출액(만원)", 0, 100000, 1300)
                 if st.button("💡 전략 자동 생성"):
                     st.session_state.strat_text = generate_strategy(sc, sa)
@@ -140,6 +184,7 @@ if st.session_state.get("authentication_status"):
                     st.success("리포트가 성공적으로 발행되었습니다.")
                     st.rerun()
 
+        # (t2, t3, t4 기존 코드 생략 없이 동일 유지)
         with t2:
             st.subheader("👥 고객 계정 및 비밀번호 관리")
             if v_list:
@@ -207,14 +252,41 @@ if st.session_state.get("authentication_status"):
                 df['매출_억'] = df['매출'] / 10000.0
                 df['매출_표기'] = df['매출'].apply(lambda x: f"{x:,}만원") 
                 latest = df.iloc[-1]
+                current_score = int(latest["점수"])
 
                 st.markdown(f"<h3 style='color:{GOLD}; margin-bottom:0;'>SNS7 BUSINESS ANALYTICS</h3>", unsafe_allow_html=True)
                 st.markdown(f"<h1 style='color:{NAVY}; margin-top:0; font-size:2.5rem;'>{real_name} 대표님 경영 분석 리포트</h1>", unsafe_allow_html=True)
                 
                 m1, m2, m3 = st.columns(3)
                 with m1: st.markdown(f'<div class="metric-card-v23"><p class="label-v23">분석 업체명</p><p class="value-v23">{latest["company_name"]}</p></div>', unsafe_allow_html=True)
-                with m2: st.markdown(f'<div class="metric-card-v23"><p class="label-v23">최신 신용점수</p><p class="value-v23">{latest["점수"]}점</p></div>', unsafe_allow_html=True)
+                with m2: st.markdown(f'<div class="metric-card-v23"><p class="label-v23">최신 신용점수</p><p class="value-v23">{current_score}점</p></div>', unsafe_allow_html=True)
                 with m3: st.markdown(f'<div class="metric-card-v23"><p class="label-v23">최근 월 매출액</p><p class="value-v23">{latest["매출"]:,}만원</p></div>', unsafe_allow_html=True)
+
+                # ==========================================
+                # [추가] 실시간 자금 조달 게이지 & 해설 블록
+                # ==========================================
+                g_col1, g_col2 = st.columns([1.2, 1])
+                with g_col1:
+                    st.markdown(f"**🎯 실시간 정책자금 가용성 진단**")
+                    st.plotly_chart(draw_credit_gauge(current_score), use_container_width=True)
+                
+                with g_col2:
+                    st.markdown(f"""
+                    <div style="background-color: white; border: 1px solid {BORDER}; padding: 25px; border-radius: 12px; height: 320px; display:flex; flex-direction:column; justify-content:center;">
+                        <h4 style="color:{NAVY}; margin-top:0; margin-bottom:15px;">📊 구간별 확보 가능 자금</h4>
+                        <ul style="line-height:2.0; color:#444; font-size:1.0rem; padding-left:20px;">
+                            <li><b>~ 839점:</b> 신용취약 소상공인자금 <span style="color:red; font-size:0.8rem;">(안전장치)</span></li>
+                            <li><b>710점 ~:</b> 골목상권 보증, 성장유망 특화보증</li>
+                            <li><b>745점 ~:</b> 기업가형 소상공인 육성 협약보증</li>
+                        </ul>
+                        <div style="margin-top:15px; padding:15px; background-color:#FFF9E6; border-left:4px solid {GOLD}; border-radius:4px; font-size:0.95rem;">
+                            <b>✅ 센터장 코멘트</b><br>
+                            대표님의 현재 점수에 맞춰 가장 유리한 정부 지원금을 우선 배정하여 맞춤형 컨설팅을 진행합니다.
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                st.divider()
 
                 c1, c2 = st.columns(2)
                 with c1:
