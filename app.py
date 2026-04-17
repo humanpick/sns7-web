@@ -108,7 +108,7 @@ def generate_strategy(score, sales):
     else:
         conclusion = "소상공인 지원 사업과 기초 미소금융 자금을 활용하여 리스크를 분산하며 성장을 도모해야 합니다."
 
-    return f"{sc_text}\n\n{sl_text}\n\n💡 결론: {conclusion}\n\n추가적인 상세 실행 방안은 다음 대면 컨설팅에서 논의하겠습니다."
+    return f"{sc_text}\n\n{sl_text}\n\n🚀 결론: {conclusion}\n\n추가적인 상세 실행 방안은 다음 대면 컨설팅에서 논의하겠습니다."
 
 # ==========================================
 # 3. 메인 화면 출력
