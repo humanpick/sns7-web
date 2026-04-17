@@ -91,16 +91,16 @@ def get_client_display_map():
 
 if 'creds' not in st.session_state: st.session_state.creds = fetch_creds()
 
-# 자동 로그인 쿠키 설정
+# 💡 [버그 해결] 쿠키 설정 유지 및 문법 에러 유발 코드 원천 제거
 authenticator = stauth.Authenticate(
     st.session_state.creds,
-    'sns7_ceo_cookie', # 쿠키 이름
-    'sns7_signature_key', # 보안 키
-    30 # 쿠키 유지 일수 (30일)
+    'sns7_ceo_cookie', # 자동 로그인을 위한 쿠키 이름
+    'sns7_signature_key', # 보안 서명 키
+    30 # 로그인 유지 기간 (30일)
 )
 
-# 💡 [버그 해결] 불필요한 '로그인' 텍스트를 제거하여 에러 방지
-name, authentication_status, username = authenticator.login('main')
+# 군더더기 없이 깔끔하게 로그인 창만 호출합니다. (에러의 원인 완전 제거)
+authenticator.login()
 
 def generate_strategy(score, sales):
     if score >= 840: conclusion = "저금리 정책자금 확보의 최적기입니다."
@@ -110,8 +110,9 @@ def generate_strategy(score, sales):
 # ==========================================
 # 4. 로그인 검증 및 메인 화면 출력
 # ==========================================
-if authentication_status:
-    # ------------------ 로그인 성공 ------------------
+# Session State를 직접 참조하여 가장 안정적으로 로그인 상태를 확인합니다.
+if st.session_state.get("authentication_status"):
+    username = st.session_state["username"]
     u_info = st.session_state.creds['usernames'].get(username, {})
     real_name = u_info.get('name', username)
     
@@ -158,7 +159,7 @@ if authentication_status:
                         st.session_state.creds = fetch_creds()
                         st.success("비밀번호가 변경되었습니다.")
             st.divider()
-            with st.form("reg_v48"):
+            with st.form("reg_v49"):
                 r_id, r_pw, r_name = st.text_input("아이디"), st.text_input("초기비번", type="password"), st.text_input("성함")
                 if st.form_submit_button("신규 계정 생성"):
                     hpw = bcrypt.hashpw(r_pw.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
@@ -255,10 +256,8 @@ if authentication_status:
             else: st.warning("발행된 리포트가 없습니다.")
         except: st.error("데이터 로딩 오류")
 
-elif authentication_status is False:
-    # ------------------ 로그인 실패 ------------------
+elif st.session_state.get("authentication_status") is False:
     st.error('아이디나 비밀번호가 일치하지 않습니다.')
 
-elif authentication_status is None:
-    # ------------------ 로그인 전 화면 ------------------
-    st.info('💡 **[관리자 안내]**\n자동 로그인을 위해 반드시 **Remember me** 체크박스를 클릭해 주세요. (로컬 환경에서는 보안상 해제될 수 있습니다)')
+elif st.session_state.get("authentication_status") is None:
+    st.info('💡 **[관리자 안내]** 자동 로그인을 위해 로그인 시 **Remember me** 체크박스를 꼭 클릭해 주세요!')
