@@ -17,54 +17,37 @@ BG_COLOR = "#F4F7F9"
 BORDER = "#D1D9E0"
 
 # ==========================================
-# 2. UI/CSS 패치 (사이드바 버튼 시인성 극대화)
+# 2. UI/CSS 패치 (사이드바 버튼 황금색 시인성 강화)
 # ==========================================
 st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;700&display=swap');
     html, body, [class*="css"] {{ font-family: 'Pretendard', sans-serif !important; background-color: {BG_COLOR} !important; }}
 
-    /* 💡 [핵심] 닫혔을 때 나타나는 '열기(>)' 버튼 디자인 */
+    /* 💡 [핵심] 사이드바가 닫혔을 때 열기(>) 버튼을 황금색으로 칠해 눈에 확 띄게 만듭니다 */
     [data-testid="collapsedControl"] {{
-        display: flex !important;
-        visibility: visible !important;
-        background-color: {GOLD} !important; /* 황금색 배경으로 확 띄게 */
-        border: 2px solid {NAVY} !important; /* 네이비 테두리 */
+        background-color: {GOLD} !important;
         border-radius: 8px !important;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.2) !important;
         top: 15px !important;
         left: 15px !important;
         z-index: 999999 !important;
-        padding: 5px !important;
-        opacity: 1 !important;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.2) !important;
+        display: flex !important;
     }}
     
     /* 열기 버튼 내부 화살표 아이콘 색상 */
     [data-testid="collapsedControl"] svg {{
-        fill: {NAVY} !important; /* 네이비색 아이콘 */
+        fill: {NAVY} !important;
         color: {NAVY} !important;
-        width: 24px !important;
-        height: 24px !important;
     }}
 
-    /* 💡 열렸을 때 안에서 보이는 '닫기(X)' 버튼 디자인 */
-    [data-testid="stSidebar"] button[title="Close sidebar"] {{
-        color: white !important;
-    }}
-    [data-testid="stSidebar"] button[title="Close sidebar"] svg {{
-        fill: white !important;
-    }}
-
-    /* 사이드바 기본 테마 */
     [data-testid="stSidebar"] {{ background-color: {NAVY} !important; }}
     [data-testid="stSidebar"] * {{ color: white !important; }}
-
-    /* 헤더 투명화 및 컨텐츠 여백 */
     [data-testid="stHeader"] {{ background: rgba(0,0,0,0) !important; }}
-    [data-testid="stToolbar"] {{ visibility: hidden !important; }}
+    
     .block-container {{ padding: 3rem 5rem !important; margin-top: -20px !important; }}
 
-    /* 명품 메트릭 카드 및 스케줄러 스타일 */
+    /* V23 메트릭 카드 및 기타 스타일 */
     .metric-card-v23 {{
         background-color: #FFFFFF !important; padding: 22px !important; border-radius: 12px !important;
         border: 2px solid {BORDER} !important; box-shadow: 0 4px 6px rgba(0,0,0,0.02) !important; margin-bottom: 20px !important;
@@ -77,7 +60,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ------------------------------------------
-# 3. 데이터 엔진 및 인증 (안정화 버전)
+# 3. 데이터 엔진 코어
 # ------------------------------------------
 SUPABASE_URL = "https://pjpnaqyyzlkolnfvlpps.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBqcG5hcXl5emxrb2xuZnZscHBzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxOTEwNzgsImV4cCI6MjA5MTc2NzA3OH0.Y1kR473B-XdxnZZG3akAsp6kvGxTIL1S8IG7is8mgMM"
@@ -104,10 +87,18 @@ def get_client_display_map():
 
 if 'creds' not in st.session_state: st.session_state.creds = fetch_creds()
 
-# 자동 로그인 쿠키 적용 (30일)
 authenticator = stauth.Authenticate(st.session_state.creds, 'sns7_ceo_cookie', 'sns7_key', 30)
 
-# 에러 없는 가장 안정적인 로그인 폼 호출
+# ==========================================
+# 💡 [핵심 해결책] 사이드바 불침번 세우기
+# ==========================================
+# 로그인 전이든 후든, 항상 사이드바에 내용을 채워두어 강제로 숨겨지는 것을 방지합니다.
+with st.sidebar:
+    st.write("### 💼 SNS7 CEO 포털")
+    st.markdown("<p style='font-size:0.9rem; color:#A0AAB5;'>프리미엄 비즈니스 분석 시스템</p>", unsafe_allow_html=True)
+    st.divider()
+
+# 로그인 폼 렌더링
 authenticator.login('main')
 
 def generate_strategy(score, sales):
@@ -124,9 +115,8 @@ if st.session_state.get("authentication_status"):
     real_name = u_info.get('name', username)
     
     with st.sidebar:
-        st.write(f"### 💼 CEO 전용 채널")
         st.write(f"**{real_name}**님 환영합니다.")
-        st.divider()
+        st.write("")
         authenticator.logout('시스템 로그아웃', 'sidebar')
 
     # 👑 [ADMIN] 관리자 데이터 센터
@@ -166,7 +156,7 @@ if st.session_state.get("authentication_status"):
                         st.session_state.creds = fetch_creds()
                         st.success("비밀번호가 변경되었습니다.")
             st.divider()
-            with st.form("reg_v50"):
+            with st.form("reg_v51"):
                 r_id, r_pw, r_name = st.text_input("아이디"), st.text_input("초기비번", type="password"), st.text_input("성함")
                 if st.form_submit_button("신규 계정 생성"):
                     hpw = bcrypt.hashpw(r_pw.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
@@ -265,6 +255,3 @@ if st.session_state.get("authentication_status"):
 
 elif st.session_state.get("authentication_status") is False:
     st.error('아이디나 비밀번호가 일치하지 않습니다.')
-
-elif st.session_state.get("authentication_status") is None:
-    st.info('로그인 후 이용해 주세요.')
