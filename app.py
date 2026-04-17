@@ -9,7 +9,7 @@ from datetime import datetime, time
 # ==========================================
 # [불변 메모리] SNS7 하이엔드 UI 표준 (V23-Fixed)
 # ==========================================
-st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="SNS7 CEO 경영관리", page_icon="💼", layout="wide", initial_sidebar_state="expanded")
 
 NAVY = "#001F3F"
 GOLD = "#D4AF37"
@@ -90,7 +90,7 @@ authenticator = stauth.Authenticate(
 
 # 사이드바 불침번 세우기 (빈 상자 방지)
 with st.sidebar:
-    st.write("### 💼 sns7 CEO 경영관리")
+    st.write("### 💼 SNS7 CEO 경영관리")
     st.markdown("<p style='font-size:0.9rem; color:#A0AAB5;'>프리미엄 비즈니스 분석 시스템</p>", unsafe_allow_html=True)
     st.divider()
 
