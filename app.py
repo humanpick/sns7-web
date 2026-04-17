@@ -6,7 +6,7 @@ import altair as alt
 import bcrypt
 
 # ==========================================
-# 1. 디자인 시스템 및 변수 (절대 고정)
+# 1. 디자인 시스템 및 변수 (절대 고정 V23)
 # ==========================================
 st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide")
 
@@ -31,7 +31,6 @@ st.markdown(f"""
     [data-testid="stSidebar"] {{ background-color: {NAVY} !important; }}
     [data-testid="stSidebar"] * {{ color: white !important; }}
 
-    /* 지표 카드: SNS7 마스터 스탠다드 */
     .metric-card-v23 {{
         background-color: #FFFFFF !important;
         padding: 22px !important;
@@ -86,7 +85,7 @@ def fetch_creds():
 if 'creds' not in st.session_state:
     st.session_state.creds = fetch_creds()
 
-authenticator = stauth.Authenticate(st.session_state.creds, 'ceo_portal_v26', 'key_v26', 30)
+authenticator = stauth.Authenticate(st.session_state.creds, 'ceo_portal_v27', 'key_v27', 30)
 authenticator.login('main')
 
 # ------------------------------------------
@@ -134,49 +133,45 @@ if st.session_state.get("authentication_status"):
         with t1:
             st.subheader("신규 데이터 누적 입력 및 전략 발행")
             v_list = [u for u in st.session_state.creds['usernames'] if st.session_state.creds['usernames'][u].get('role') != 'admin']
-            if not v_list: st.info("고객을 먼저 등록해 주세요.")
+            if not v_list: 
+                st.info("고객을 먼저 등록해 주세요.")
             else:
                 sel_id = st.selectbox("대상 고객 선택", v_list, format_func=lambda x: f"{st.session_state.creds['usernames'][x]['name']} ({x})")
                 
-                # 💡 [해결] 빈칸 저장 방지를 위한 세션 키 초기화
+                # 💡 [핵심 해결] st.form을 완전히 제거하고 일반 레이아웃으로 변경했습니다. 
+                # 이제 에러 없이 텍스트 영역을 자유롭게 수정할 수 있습니다.
+                comp = st.text_input("분석 업체명", placeholder="예: 불타는닭발")
+                c1, c2 = st.columns(2)
+                sc = c1.number_input("신용점수", 500, 999, 850)
+                sa = c2.number_input("월 매출액(만원)", 0, 100000, 1300)
+                
+                st.write("---")
+                
+                # 1번 버튼: 전략 자동 생성 (버튼 클릭 시 텍스트 업데이트 후 리런)
+                if st.button("💡 1. 전략 자동 생성 (AI 비서)"):
+                    st.session_state.strat_text = generate_strategy(sc, sa)
+                    st.rerun()
+                
                 if 'strat_text' not in st.session_state:
                     st.session_state.strat_text = ""
                 
-                with st.form("input_v26"):
-                    comp = st.text_input("분석 업체명")
-                    c1, c2 = st.columns(2)
-                    sc = c1.number_input("신용점수", 500, 999, 850)
-                    sa = c2.number_input("월 매출액(만원)", 0, 100000, 1300)
-                    
-                    st.write("---")
-                    st.write("💡 **[순서 안내]** 아래 **1번** 버튼으로 전략을 생성한 후, **2번** 버튼으로 최종 저장하세요.")
-                    
-                    # session_state와 안전하게 동기화되는 텍스트 박스
-                    cmt = st.text_area("공민준 센터장의 경영 전략 제시", key="strat_text", height=150)
-                    
-                    # 💡 [해결] 버튼의 역할을 확실하게 분리
-                    col_btn1, col_btn2 = st.columns(2)
-                    auto_btn = col_btn1.form_submit_button("💡 1. 전략 자동 생성 (AI 비서)")
-                    save_btn = col_btn2.form_submit_button("💾 2. 최종 저장 및 리포트 발행")
+                # 텍스트 박스: 자동 생성 후 자유롭게 수정 가능
+                cmt = st.text_area("공민준 센터장의 경영 전략 제시", key="strat_text", height=150)
+                
+                # 2번 버튼: 데이터베이스 최종 저장
+                if st.button("💾 2. 최종 저장 및 리포트 발행"):
+                    if not comp:
+                        st.warning("분석 업체명을 입력해 주세요.")
+                    else:
+                        supabase.table('client_data').insert({
+                            "client_id": sel_id, "company_name": comp,
+                            "credit_score": str(sc), "monthly_sales": str(sa), "strategy_comment": cmt
+                        }).execute()
+                        st.session_state.strat_text = "" # 전송 후 텍스트 박스 깔끔하게 비우기
+                        st.success(f"{comp} 리포트가 성공적으로 발행되었습니다! 고객 화면에서 확인하세요.")
 
-                # 폼 바깥에서 저장 및 생성 로직 처리 (빈칸 버그 원천 차단)
-                if auto_btn:
-                    st.session_state.strat_text = generate_strategy(sc, sa)
-                    st.rerun()
-
-                if save_btn:
-                    final_cmt = st.session_state.strat_text # 현재 텍스트 박스의 값을 정확히 가져옵니다.
-                    supabase.table('client_data').insert({
-                        "client_id": sel_id, "company_name": comp,
-                        "credit_score": str(sc), "monthly_sales": str(sa), "strategy_comment": final_cmt
-                    }).execute()
-                    st.session_state.strat_text = "" # 전송 후 텍스트 박스 초기화
-                    st.success(f"{comp} 리포트가 성공적으로 저장 및 발행되었습니다!")
-                    st.rerun()
-
-        # [T2: 계정 관리, T3: 이력 관리 로직]
         with t2:
-            with st.form("reg_v26"):
+            with st.form("reg_v27"):
                 r_id = st.text_input("아이디")
                 r_pw = st.text_input("비밀번호", type="password")
                 r_name = st.text_input("성함")
@@ -201,7 +196,7 @@ if st.session_state.get("authentication_status"):
                 )
 
     # ------------------------------------------
-    # 📈 [VIEWER] 하이엔드 경영 리포트 (민준님 지정 UI 100% 보존)
+    # 📈 [VIEWER] 하이엔드 경영 리포트 (민준님 절대 고정 UI)
     # ------------------------------------------
     else:
         try:
@@ -224,12 +219,9 @@ if st.session_state.get("authentication_status"):
                 st.write("")
 
                 m1, m2, m3 = st.columns(3)
-                with m1:
-                    st.markdown(f'<div class="metric-card-v23"><p class="label-v23">분석 업체명</p><p class="value-v23">{latest["company_name"]}</p></div>', unsafe_allow_html=True)
-                with m2:
-                    st.markdown(f'<div class="metric-card-v23"><p class="label-v23">최신 신용점수</p><p class="value-v23">{latest["점수"]} 점</p></div>', unsafe_allow_html=True)
-                with m3:
-                    st.markdown(f'<div class="metric-card-v23"><p class="label-v23">최근 월 매출액</p><p class="value-v23">{latest["매출"]:,} 만원</p></div>', unsafe_allow_html=True)
+                with m1: st.markdown(f'<div class="metric-card-v23"><p class="label-v23">분석 업체명</p><p class="value-v23">{latest["company_name"]}</p></div>', unsafe_allow_html=True)
+                with m2: st.markdown(f'<div class="metric-card-v23"><p class="label-v23">최신 신용점수</p><p class="value-v23">{latest["점수"]} 점</p></div>', unsafe_allow_html=True)
+                with m3: st.markdown(f'<div class="metric-card-v23"><p class="label-v23">최근 월 매출액</p><p class="value-v23">{latest["매출"]:,} 만원</p></div>', unsafe_allow_html=True)
 
                 c1, c2 = st.columns(2)
                 with c1:
@@ -251,7 +243,6 @@ if st.session_state.get("authentication_status"):
                     labels_s = points_s.mark_text(dy=25, fontSize=13, fontWeight='bold', color='#3498DB').encode(text='매출_표기:N')
                     st.altair_chart((area_s + points_s + labels_s).properties(height=350), use_container_width=True)
 
-                # 💡 [방어 코드] 만약 과거의 빈칸 데이터가 불러와진 경우 안내 메시지 출력
                 strat_text = latest.get('strategy_comment', '')
                 if pd.isna(strat_text) or str(strat_text).strip() == "":
                     strat_text = "센터장의 맞춤형 경영 전략을 분석 및 작성 중입니다."
