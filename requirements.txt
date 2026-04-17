@@ -1,4 +1,7 @@
 streamlit
-pandas
 streamlit-authenticator
 supabase
+pandas
+altair
+bcrypt
+plotly
