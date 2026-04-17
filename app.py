@@ -17,41 +17,54 @@ BG_COLOR = "#F4F7F9"
 BORDER = "#D1D9E0"
 
 # ==========================================
-# 2. 하이브리드 반응형 & 사이드바 제어 CSS
+# 2. UI/CSS 패치 (사이드바 버튼 시인성 극대화)
 # ==========================================
 st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;700&display=swap');
     html, body, [class*="css"] {{ font-family: 'Pretendard', sans-serif !important; background-color: {BG_COLOR} !important; }}
 
-    /* 🖥️ [PC용] 사이드바 철제 고정 */
-    @media (min-width: 992px) {{
-        section[data-testid="stSidebar"] {{
-            transform: none !important; transition: none !important;
-            display: flex !important; visibility: visible !important;
-            width: 280px !important; min-width: 280px !important; left: 0 !important;
-        }}
-        [data-testid="collapsedControl"], button[title="Close sidebar"] {{ display: none !important; }}
-        .main .block-container {{ margin-left: 20px !important; }}
+    /* 💡 [핵심] 닫혔을 때 나타나는 '열기(>)' 버튼 디자인 */
+    [data-testid="collapsedControl"] {{
+        display: flex !important;
+        visibility: visible !important;
+        background-color: {GOLD} !important; /* 황금색 배경으로 확 띄게 */
+        border: 2px solid {NAVY} !important; /* 네이비 테두리 */
+        border-radius: 8px !important;
+        top: 15px !important;
+        left: 15px !important;
+        z-index: 999999 !important;
+        padding: 5px !important;
+        opacity: 1 !important;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.2) !important;
+    }}
+    
+    /* 열기 버튼 내부 화살표 아이콘 색상 */
+    [data-testid="collapsedControl"] svg {{
+        fill: {NAVY} !important; /* 네이비색 아이콘 */
+        color: {NAVY} !important;
+        width: 24px !important;
+        height: 24px !important;
     }}
 
-    /* 📱 [모바일용] 자동 숨김 및 황금 버튼 활성화 */
-    @media (max-width: 991px) {{
-        [data-testid="collapsedControl"] {{
-            display: block !important;
-            background-color: {NAVY} !important;
-            border: 2px solid {GOLD} !important;
-            border-radius: 8px !important;
-            top: 15px !important; left: 15px !important; z-index: 999999 !important;
-        }}
+    /* 💡 열렸을 때 안에서 보이는 '닫기(X)' 버튼 디자인 */
+    [data-testid="stSidebar"] button[title="Close sidebar"] {{
+        color: white !important;
+    }}
+    [data-testid="stSidebar"] button[title="Close sidebar"] svg {{
+        fill: white !important;
     }}
 
+    /* 사이드바 기본 테마 */
     [data-testid="stSidebar"] {{ background-color: {NAVY} !important; }}
     [data-testid="stSidebar"] * {{ color: white !important; }}
+
+    /* 헤더 투명화 및 컨텐츠 여백 */
     [data-testid="stHeader"] {{ background: rgba(0,0,0,0) !important; }}
     [data-testid="stToolbar"] {{ visibility: hidden !important; }}
+    .block-container {{ padding: 3rem 5rem !important; margin-top: -20px !important; }}
 
-    /* 명품 메트릭 카드 */
+    /* 명품 메트릭 카드 및 스케줄러 스타일 */
     .metric-card-v23 {{
         background-color: #FFFFFF !important; padding: 22px !important; border-radius: 12px !important;
         border: 2px solid {BORDER} !important; box-shadow: 0 4px 6px rgba(0,0,0,0.02) !important; margin-bottom: 20px !important;
@@ -64,7 +77,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ------------------------------------------
-# 3. 데이터 엔진 코어
+# 3. 데이터 엔진 및 인증 (안정화 버전)
 # ------------------------------------------
 SUPABASE_URL = "https://pjpnaqyyzlkolnfvlpps.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBqcG5hcXl5emxrb2xuZnZscHBzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxOTEwNzgsImV4cCI6MjA5MTc2NzA3OH0.Y1kR473B-XdxnZZG3akAsp6kvGxTIL1S8IG7is8mgMM"
@@ -91,16 +104,11 @@ def get_client_display_map():
 
 if 'creds' not in st.session_state: st.session_state.creds = fetch_creds()
 
-# 💡 [버그 해결] 쿠키 설정 유지 및 문법 에러 유발 코드 원천 제거
-authenticator = stauth.Authenticate(
-    st.session_state.creds,
-    'sns7_ceo_cookie', # 자동 로그인을 위한 쿠키 이름
-    'sns7_signature_key', # 보안 서명 키
-    30 # 로그인 유지 기간 (30일)
-)
+# 자동 로그인 쿠키 적용 (30일)
+authenticator = stauth.Authenticate(st.session_state.creds, 'sns7_ceo_cookie', 'sns7_key', 30)
 
-# 군더더기 없이 깔끔하게 로그인 창만 호출합니다. (에러의 원인 완전 제거)
-authenticator.login()
+# 에러 없는 가장 안정적인 로그인 폼 호출
+authenticator.login('main')
 
 def generate_strategy(score, sales):
     if score >= 840: conclusion = "저금리 정책자금 확보의 최적기입니다."
@@ -110,7 +118,6 @@ def generate_strategy(score, sales):
 # ==========================================
 # 4. 로그인 검증 및 메인 화면 출력
 # ==========================================
-# Session State를 직접 참조하여 가장 안정적으로 로그인 상태를 확인합니다.
 if st.session_state.get("authentication_status"):
     username = st.session_state["username"]
     u_info = st.session_state.creds['usernames'].get(username, {})
@@ -159,7 +166,7 @@ if st.session_state.get("authentication_status"):
                         st.session_state.creds = fetch_creds()
                         st.success("비밀번호가 변경되었습니다.")
             st.divider()
-            with st.form("reg_v49"):
+            with st.form("reg_v50"):
                 r_id, r_pw, r_name = st.text_input("아이디"), st.text_input("초기비번", type="password"), st.text_input("성함")
                 if st.form_submit_button("신규 계정 생성"):
                     hpw = bcrypt.hashpw(r_pw.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
@@ -260,4 +267,4 @@ elif st.session_state.get("authentication_status") is False:
     st.error('아이디나 비밀번호가 일치하지 않습니다.')
 
 elif st.session_state.get("authentication_status") is None:
-    st.info('💡 **[관리자 안내]** 자동 로그인을 위해 로그인 시 **Remember me** 체크박스를 꼭 클릭해 주세요!')
+    st.info('로그인 후 이용해 주세요.')
