@@ -6,7 +6,7 @@ import altair as alt
 import bcrypt
 
 # ==========================================
-# 1. 디자인 시스템 및 변수 (절대 고정 V23)
+# 1. 디자인 시스템 및 변수 (V23 절대 고정)
 # ==========================================
 st.set_page_config(page_title="SNS7 CEO 포털", page_icon="💼", layout="wide")
 
@@ -85,7 +85,7 @@ def fetch_creds():
 if 'creds' not in st.session_state:
     st.session_state.creds = fetch_creds()
 
-authenticator = stauth.Authenticate(st.session_state.creds, 'ceo_portal_v27', 'key_v27', 30)
+authenticator = stauth.Authenticate(st.session_state.creds, 'ceo_portal_v28', 'key_v28', 30)
 authenticator.login('main')
 
 # ------------------------------------------
@@ -132,22 +132,27 @@ if st.session_state.get("authentication_status"):
         
         with t1:
             st.subheader("신규 데이터 누적 입력 및 전략 발행")
+            
+            # 성공 메시지를 안전하게 띄우기 위한 장치
+            if st.session_state.get('save_success_msg'):
+                st.success(st.session_state.save_success_msg)
+                st.session_state.save_success_msg = "" # 한 번 띄우고 초기화
+
             v_list = [u for u in st.session_state.creds['usernames'] if st.session_state.creds['usernames'][u].get('role') != 'admin']
             if not v_list: 
                 st.info("고객을 먼저 등록해 주세요.")
             else:
                 sel_id = st.selectbox("대상 고객 선택", v_list, format_func=lambda x: f"{st.session_state.creds['usernames'][x]['name']} ({x})")
                 
-                # 💡 [핵심 해결] st.form을 완전히 제거하고 일반 레이아웃으로 변경했습니다. 
-                # 이제 에러 없이 텍스트 영역을 자유롭게 수정할 수 있습니다.
                 comp = st.text_input("분석 업체명", placeholder="예: 불타는닭발")
                 c1, c2 = st.columns(2)
                 sc = c1.number_input("신용점수", 500, 999, 850)
                 sa = c2.number_input("월 매출액(만원)", 0, 100000, 1300)
                 
                 st.write("---")
+                st.write("💡 **[순서 안내]** 아래 **1번** 버튼으로 전략을 생성한 후, **2번** 버튼으로 최종 저장하세요.")
                 
-                # 1번 버튼: 전략 자동 생성 (버튼 클릭 시 텍스트 업데이트 후 리런)
+                # 1. 자동 생성 버튼
                 if st.button("💡 1. 전략 자동 생성 (AI 비서)"):
                     st.session_state.strat_text = generate_strategy(sc, sa)
                     st.rerun()
@@ -155,48 +160,65 @@ if st.session_state.get("authentication_status"):
                 if 'strat_text' not in st.session_state:
                     st.session_state.strat_text = ""
                 
-                # 텍스트 박스: 자동 생성 후 자유롭게 수정 가능
                 cmt = st.text_area("공민준 센터장의 경영 전략 제시", key="strat_text", height=150)
                 
-                # 2번 버튼: 데이터베이스 최종 저장
+                # 2. 최종 저장 버튼 (에러 방어막 적용)
                 if st.button("💾 2. 최종 저장 및 리포트 발행"):
                     if not comp:
                         st.warning("분석 업체명을 입력해 주세요.")
                     else:
-                        supabase.table('client_data').insert({
-                            "client_id": sel_id, "company_name": comp,
-                            "credit_score": str(sc), "monthly_sales": str(sa), "strategy_comment": cmt
-                        }).execute()
-                        st.session_state.strat_text = "" # 전송 후 텍스트 박스 깔끔하게 비우기
-                        st.success(f"{comp} 리포트가 성공적으로 발행되었습니다! 고객 화면에서 확인하세요.")
+                        try:
+                            # 💡 [핵심 해결] str(sc) 변환을 제거하여 DB와의 타입 충돌(APIError) 원천 봉쇄
+                            supabase.table('client_data').insert({
+                                "client_id": sel_id, 
+                                "company_name": comp,
+                                "credit_score": sc,   
+                                "monthly_sales": sa,  
+                                "strategy_comment": cmt
+                            }).execute()
+                            
+                            # 성공 메시지 예약 및 입력창 초기화
+                            st.session_state.save_success_msg = f"{comp} 리포트가 성공적으로 발행되었습니다!"
+                            if 'strat_text' in st.session_state:
+                                del st.session_state.strat_text # Streamlit 에러 방지용 안전 삭제
+                            st.rerun()
+                        except Exception as e:
+                            # 💡 에러 발생 시 앱이 죽지 않고 붉은 글씨로 원인을 알려줌
+                            st.error(f"데이터베이스 저장 중 오류가 발생했습니다: {e}")
 
         with t2:
-            with st.form("reg_v27"):
+            with st.form("reg_v28"):
                 r_id = st.text_input("아이디")
                 r_pw = st.text_input("비밀번호", type="password")
                 r_name = st.text_input("성함")
                 if st.form_submit_button("등록 완료"):
-                    hpw = bcrypt.hashpw(r_pw.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-                    supabase.table('users').insert({"username": r_id, "name": r_name, "password": hpw, "role": "viewer"}).execute()
-                    st.session_state.creds = fetch_creds()
-                    st.success("계정이 생성되었습니다.")
-                    st.rerun()
+                    try:
+                        hpw = bcrypt.hashpw(r_pw.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                        supabase.table('users').insert({"username": r_id, "name": r_name, "password": hpw, "role": "viewer"}).execute()
+                        st.session_state.creds = fetch_creds()
+                        st.success("계정이 생성되었습니다.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"계정 생성 오류 (아이디 중복 등): {e}")
             st.divider()
             cl_df = pd.DataFrame([{"ID": k, "이름": v['name']} for k, v in st.session_state.creds['usernames'].items() if v['role'] != 'admin'])
             if not cl_df.empty: st.table(cl_df)
 
         with t3:
             st.info("💡 발행된 데이터의 수치를 변경하거나 삭제할 수 있습니다.")
-            raw_res = supabase.table('client_data').select('*').order('created_at', desc=True).execute()
-            if raw_res.data:
-                edited_df = st.data_editor(
-                    pd.DataFrame(raw_res.data),
-                    column_config={"client_id":"ID", "company_name":"업체", "credit_score":"점수", "monthly_sales":"매출", "strategy_comment":"전략", "created_at":"발행일"},
-                    disabled=["created_at", "client_id"], num_rows="dynamic", use_container_width=True
-                )
+            try:
+                raw_res = supabase.table('client_data').select('*').order('created_at', desc=True).execute()
+                if raw_res.data:
+                    edited_df = st.data_editor(
+                        pd.DataFrame(raw_res.data),
+                        column_config={"client_id":"ID", "company_name":"업체", "credit_score":"점수", "monthly_sales":"매출", "strategy_comment":"전략", "created_at":"발행일"},
+                        disabled=["created_at", "client_id"], num_rows="dynamic", use_container_width=True
+                    )
+            except Exception as e:
+                st.error(f"이력 로딩 오류: {e}")
 
     # ------------------------------------------
-    # 📈 [VIEWER] 하이엔드 경영 리포트 (민준님 절대 고정 UI)
+    # 📈 [VIEWER] 하이엔드 경영 리포트 (민준님 지정 UI 보존)
     # ------------------------------------------
     else:
         try:
