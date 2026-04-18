@@ -95,12 +95,18 @@ def draw_credit_gauge(score):
     fig.update_layout(height=320, margin=dict(l=20, r=20, t=60, b=20), paper_bgcolor="rgba(0,0,0,0)", font={'family': "Pretendard"})
     return fig
 
-# ------------------------------------------
-# 3. 데이터 엔진 코어
-# ------------------------------------------
-SUPABASE_URL = "https://pjpnaqyyzlkolnfvlpps.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBqcG5hcXl5emxrb2xuZnZscHBzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxOTEwNzgsImV4cCI6MjA5MTc2NzA3OH0.Y1kR473B-XdxnZZG3akAsp6kvGxTIL1S8IG7is8mgMM"
+import streamlit as st
+from supabase import create_client
 
+# ------------------------------------------
+# 3. 데이터 엔진 코어 (보안 적용 버전)
+# ------------------------------------------
+# 소스 코드에 직접 적지 않고, Streamlit의 '비밀 금고'에서 정보를 가져옵니다.
+SUPABASE_URL = st.secrets["SUPABASE_URL"]
+SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+
+# DB 연결
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 @st.cache_resource
 def init_supabase():
     return create_client(SUPABASE_URL, SUPABASE_KEY)
